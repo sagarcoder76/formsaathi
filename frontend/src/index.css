@@ -1,3 +1,20 @@
 @import "tailwindcss";
 @custom-variant dark (&:where(.dark, .dark *));
-body{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+html{scroll-behavior:smooth}
+body{font-family:Inter,ui-sans-system,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+::selection{background:#14b8a6;color:#fff}
+@keyframes fadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
+@keyframes floaty{0%,100%{transform:translateY(0)}50%{transform:translateY(-12px)}}
+@keyframes shimmer{0%{background-position:-400px 0}100%{background-position:400px 0}}
+@keyframes pulse-ring{0%{box-shadow:0 0 0 0 rgba(20,184,166,.45)}70%{box-shadow:0 0 0 10px rgba(20,184,166,0)}100%{box-shadow:0 0 0 0 rgba(20,184,166,0)}}
+.anim-fadeUp{animation:fadeUp .55s cubic-bezier(.22,1,.36,1) both}
+.anim-floaty{animation:floaty 6s ease-in-out infinite}
+.pulse-ring{animation:pulse-ring 2s infinite}
+.stagger>*{animation:fadeUp .55s cubic-bezier(.22,1,.36,1) both}
+.stagger>*:nth-child(2){animation-delay:.06s}.stagger>*:nth-child(3){animation-delay:.12s}.stagger>*:nth-child(4){animation-delay:.18s}.stagger>*:nth-child(5){animation-delay:.24s}.stagger>*:nth-child(6){animation-delay:.3s}.stagger>*:nth-child(7){animation-delay:.36s}.stagger>*:nth-child(8){animation-delay:.42s}.stagger>*:nth-child(9){animation-delay:.48s}
+.skeleton{background:linear-gradient(90deg,#e2e8f0 25%,#f1f5f9 50%,#e2e8f0 75%);background-size:800px 100%;animation:shimmer 1.4s infinite linear}
+.dark .skeleton{background:linear-gradient(90deg,#1e293b 25%,#334155 50%,#1e293b 75%);background-size:800px 100%}
+.glass{background:rgba(255,255,255,.75);backdrop-filter:blur(14px)}
+.dark .glass{background:rgba(15,23,42,.75)}
+.card-hover{transition:transform .25s cubic-bezier(.22,1,.36,1),box-shadow .25s}
+.card-hover:hover{transform:translateY(-4px);box-shadow:0 20px 40px -18px rgba(10,31,68,.35)}
