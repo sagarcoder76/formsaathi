@@ -1,0 +1,9 @@
+from datetime import datetime, timezone
+from .models import Opportunity
+NOW=datetime.now(timezone.utc).isoformat()
+# Clearly-labelled DEMO records — NOT live results. Replace by live research when key configured.
+DEMO=[
+ Opportunity(id="demo-1",title="[DEMO] Sample Hackathon — Replace with live results",category="Hackathon",organizer="Demo Organizer (sample)",description="Sample record shown only in demo mode (no TinyFish key). Add TINYFISH_API_KEY to backend/.env and click Search the Web for real opportunities.",eligibility=["Demo eligibility text — not a real listing"],location="India",mode="Online",deadline=None,deadline_text=None,deadline_status="unknown",fees="Free (demo)",official_url="https://example.com",source_url="https://example.com",source_type="demo",source_domain="example.com",last_checked_at=NOW,verification_status="demo"),
+ Opportunity(id="demo-2",title="[DEMO] Sample Scholarship — Replace with live results",category="Scholarship",organizer="Demo Organizer (sample)",description="Sample record for UI testing only. It is not a real scholarship and example.com is not an application page.",eligibility=["Demo only"],location="India",mode="Online",deadline=None,deadline_status="unknown",fees=None,official_url="https://example.com",source_url="https://example.com",source_type="demo",source_domain="example.com",last_checked_at=NOW,verification_status="demo"),
+ Opportunity(id="demo-3",title="[DEMO] Sample Remote Internship — Replace with live results",category="Internship",organizer="Demo Organizer (sample)",description="Sample record for UI testing only.",eligibility=["Demo only"],location="Remote",mode="Remote",deadline=None,deadline_status="unknown",fees=None,official_url="https://example.com",source_url="https://example.com",source_type="demo",source_domain="example.com",last_checked_at=NOW,verification_status="demo"),
+]
