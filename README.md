@@ -1,8 +1,16 @@
-# FormSaathi AI — Discover Opportunities. Never Miss a Chance.
+# FormSaathi — Internship & Placement Portal
 
 Working end-to-end app: **React+TypeScript+Vite+Tailwind** frontend, **FastAPI** backend, **TinyFish Search/Fetch (Agent fallback)** for live web research. No database.
 
+The portal covers **two listing types only — Internships and Placement (campus/full-time) jobs**. Researched pages that are not internship or job listings (scholarships, hackathons, courses, events, etc.) are dropped from the output automatically.
+
 > Demo mode: without a TinyFish key the app shows clearly-labelled `[DEMO]` sample records (example.com — not real). Nothing is faked as “live”.
+
+## What changed for the portal
+- **Scope filter**: extraction classifies each page as `Internship`, `Placement`, or drops it. Only the two portal categories exist end-to-end.
+- **Structured job data**: every listing carries `role` (e.g. Frontend Developer, Data Analyst), `skills[]`, city-level `location`, work `mode` (Remote/Hybrid/In-person), and `compensation` (stipend/salary/CTC, verbatim from the page — `null` when not stated).
+- **Role / skill / location filters**: filter sidebar on the Browse Jobs page, plus job type, work mode, deadline status and sort; the same filters are available on `POST /api/opportunities/search`.
+- **Professional UI**: clear homepage with keyword + location search, latest-openings section, filter-sidebar job listing, and a structured job-details view with prominent **Apply on Official Site** actions.
 
 ## TinyFish docs verified (16 Oct 2026)
 - Search: `GET https://api.search.tinyfish.ai?query=&location=IN&language=en`
@@ -31,24 +39,26 @@ npm run dev
 Open **http://localhost:5173**
 
 ### Test a real search
-1. In the hero search box type `Find scholarships for undergraduate engineering students in India`
-2. Click **Discover Opportunities** → stats show candidates / fetched / extracted / duplicates removed.
-3. Click **View Details** → verify deadline status, source link, last-checked time. Always apply on the official site yourself.
+1. In the homepage search box type `React developer internship in Bengaluru` (optionally add a location).
+2. Click **Search Jobs** → stats show candidates / fetched / valid listings / duplicates removed.
+3. Use the sidebar to filter by **role, skill, location, mode or deadline**, then click **View Details** → verify deadline status, skills, compensation and source link. Always apply on the official company site yourself.
 
 ## API
-`GET /api/health` · `GET /api/categories` · `GET /api/opportunities/demo` · `POST /api/opportunities/research` · `POST /api/opportunities/search` (filter/sort passed results) · `GET /api/opportunities/{id}` · `POST /api/opportunities/validate`
+`GET /api/health` · `GET /api/categories` (`Internship`, `Placement`) · `GET /api/opportunities/demo` · `POST /api/opportunities/research` · `POST /api/opportunities/search` (filter/sort by category, role, skill, location, mode, deadline) · `GET /api/opportunities/{id}` · `POST /api/opportunities/validate`
 
 ## How it works & limits
-Search → Fetch (batch ≤5 by default) → deterministic Python extraction (deadline regex, eligibility lines, fee, apply links — missing = `null`/`unknown`, never invented) → dedupe by exact normalized title+organizer (official source preferred) → deadline status (`open` only with a future known deadline, `closing_soon` ≤14d, `expired`, else `unknown`) → cards with source links.
+Search (query is augmented with role/skills/location/type + “India”) → Fetch (batch ≤5 by default) → **portal scope check** (non-job pages dropped) → deterministic Python extraction (role detection, skill dictionary, city detection, deadline regex, eligibility lines, stipend/salary/CTC, apply links — missing = `null`/`unknown`, never invented) → dedupe by exact normalized title+organizer (official source preferred) → deadline status (`open` only with a future known deadline, `closing_soon` ≤14d, `expired`, else `unknown`) → cards with source links.
 - Cache: identical research cached 10 min in backend memory (UI says “served from cache”). Research results disappear on backend restart.
 - Saved/recent/preferences: browser `localStorage` only — no sync, no account.
-- Rate limit: 10 research req/min/IP. URLs validated (http/https, no localhost/private).
+- Rate limit: 10 research req/min/IP (returns a proper 429). URLs validated (http/https, no localhost/private).
 - Agent fallback: only when you enable it / Fetch yields nothing — narrow goal, no CAPTCHA/paywall bypass, never auto-submits.
 
 ## Tests
 ```bash
-cd backend && python -m pytest tests/ -q   # 6 tests: dates, no-fabrication, expiry, SSRF guard, dedupe, extraction
+cd backend && python -m pytest tests/ -q   # 12 tests: dates, no-fabrication, expiry, SSRF guard, dedupe,
+                                           # portal classification, non-job drop, role/skill/location extraction, filters
 cd ../frontend && npm run build            # type-check + production build
+npm run lint                               # oxlint — 0 warnings
 ```
 Live TinyFish Search/Fetch could not be tested here (no API key in this environment) — the code paths follow the verified docs above and return a clear 502 if TinyFish rejects a request.
 
@@ -69,8 +79,8 @@ This repo is ready for a **single Vercel project**: frontend (static) + backend 
    - `TINYFISH_API_KEY` = your key (Production + Preview)
    - `FRONTEND_ORIGIN` = `*`
 5. Click **Deploy**. When done Vercel gives you a public URL like `https://formsaathi-xxx.vercel.app`.
-6. Test: open that URL → search "hackathons India" → you should see real results and stats (not DEMO). Also open `https://YOUR-URL/api/health` → `"tinyfish_configured": true`.
+6. Test: open that URL → search "React internship" → you should see real listings and stats (not DEMO). Also open `https://YOUR-URL/api/health` → `"tinyfish_configured": true`.
 
 **Notes:** Vercel serverless has a 60s function limit (set in vercel.json) — keep `max_fetch` ≤5. In-memory cache/results reset between serverless invocations (expected, no database by design). If a deploy fails, open the Vercel build log and share the red error lines — do not share your key.
 
-⚠️ **Security:** Your key was pasted in chat. It now lives only in local `backend/.env` (git-ignored, verified not in any other file/bundle). Because it was shared in chat, consider rotating it later at agent.tinyfish.ai/api-keys and updating both `.env` and Vercel env var.
+⚠️ **Security:** If your key was pasted in chat, keep it only in local `backend/.env` (git-ignored). Consider rotating it at agent.tinyfish.ai/api-keys and updating both `.env` and the Vercel env var.

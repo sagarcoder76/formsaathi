@@ -33,8 +33,8 @@ async def fetch_urls(urls:list[str]):
         return r.json()
 
 async def agent_extract(url:str):
-    schema={"type":"object","properties":{"title":{"type":"string"},"organizer":{"type":"string"},"eligibility":{"type":"array","items":{"type":"string"}},"deadline":{"type":"string"},"fees":{"type":"string"},"application_url":{"type":"string"},"location":{"type":"string"},"mode":{"type":"string"}},"required":[]}
-    goal=("Inspect this publicly accessible opportunity page. Find the eligibility criteria, application deadline, organizer, participation fee, and official application link. "
+    schema={"type":"object","properties":{"title":{"type":"string"},"category":{"type":"string","enum":["Internship","Placement"]},"role":{"type":"string"},"organizer":{"type":"string"},"skills":{"type":"array","items":{"type":"string"}},"eligibility":{"type":"array","items":{"type":"string"}},"deadline":{"type":"string"},"compensation":{"type":"string"},"application_url":{"type":"string"},"location":{"type":"string"},"mode":{"type":"string"}},"required":[]}
+    goal=("Inspect this publicly accessible internship or placement (job) page. Find the job category (Internship or Placement), role, required skills, eligibility criteria, application deadline, organizer/company, compensation (stipend, salary or CTC), work mode, location, and official application link. "
           "Return the extracted information as structured JSON. If any field is missing, return null rather than guessing. Include the source URL. Do not submit any application, do not bypass CAPTCHA or login.")
     async with httpx.AsyncClient(timeout=120) as c:
         r=await c.post(AGENT_URL, json={"url":url,"goal":goal,"output_schema":schema,"browser_profile":"lite"}, headers=_headers()); r.raise_for_status()
