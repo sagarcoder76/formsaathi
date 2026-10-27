@@ -2,6 +2,7 @@ import { motion } from 'framer-motion'
 import { ExternalLink, MapPin, Clock, Trash2 } from 'lucide-react'
 import type { TrackerEntry, Stage } from '../types'
 import { deadlineLine } from '../lib/helpers'
+import EmptyState from './EmptyState'
 
 const COLUMNS: { stage: Exclude<Stage, 'saved'>; label: string; accent: string; dot: string }[] = [
   { stage: 'applied', label: 'Applied', accent: 'border-t-navy-500', dot: 'bg-navy-500' },
@@ -55,8 +56,14 @@ export default function TrackerBoard({ entries, onStage, onNotes, onRemove, onOp
         )
       })}
       {entries.length === 0 && (
-        <div className="md:col-span-2 xl:col-span-4 text-center py-14 text-muted border border-dashed border-line dark:border-slate-700 rounded-2xl">
-          Your pipeline is empty. Open any listing and choose <b>Applied</b> to track it here.
+        <div className="md:col-span-2 xl:col-span-4">
+          <EmptyState
+            compact
+            image="/images/empty-tracker.webp"
+            imageAlt="Student taking notes beside a laptop while studying outdoors on campus"
+            title="Your pipeline is empty"
+            body="Open any listing and choose Applied, Interview, Offer or Rejected to track its progress here, with notes and deadlines in one place."
+          />
         </div>
       )}
     </div>

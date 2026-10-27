@@ -261,64 +261,75 @@ export default function App() {
         <section className="relative w-full overflow-hidden bg-gradient-to-b from-mint/90 via-mint/40 to-canvas dark:from-teal-950/25 dark:via-navy-950/40 dark:to-[#070d1f] border-b border-line/70 dark:border-slate-800/70">
           <div aria-hidden className="pointer-events-none absolute -top-24 -left-24 w-96 h-96 rounded-full bg-teal-300/25 dark:bg-teal-500/15 blur-3xl anim-aurora" />
           <div aria-hidden className="pointer-events-none absolute -top-10 -right-24 w-96 h-96 rounded-full bg-navy-300/25 dark:bg-navy-600/20 blur-3xl anim-aurora" style={{ animationDelay: '-7s' }} />
-          <div className="relative max-w-7xl mx-auto px-4 sm:px-6 text-center py-14 md:py-20">
+          <div className="relative max-w-7xl mx-auto px-4 sm:px-6 py-14 md:py-20 grid lg:grid-cols-2 gap-10 lg:gap-14 items-center">
 
-            <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, ease: EASE }} className="relative">
-              <span className="inline-flex items-center gap-2 text-[11px] font-semibold tracking-[0.18em] uppercase text-teal-700 dark:text-teal-400 bg-teal-50 dark:bg-teal-950/50 border border-teal-100 dark:border-teal-900 rounded-full px-3 py-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-teal-500 pulse-ring" /> Internship & Placement Portal
-              </span>
-              <h1 className="mt-5 text-4xl md:text-[3.4rem]/[1.1] font-extrabold tracking-tight text-navy-900 dark:text-white text-balance">
-                Your next opportunity <span className="text-teal-600 dark:text-teal-400">starts here.</span>
-              </h1>
-              <p className="mt-5 text-base md:text-lg text-muted dark:text-slate-300 max-w-2xl mx-auto leading-relaxed">
-                Discover verified internships, fresher jobs and campus placements across India — filter by role, skill and location, check scam warnings, and apply directly on the official company page.
-              </p>
-              <div className="mt-7 flex flex-wrap justify-center gap-2 text-xs text-muted dark:text-slate-300">
-                {['Real source links', 'No invented deadlines', 'Scam-payment warnings'].map(x => (
-                  <span key={x} className="bg-white dark:bg-slate-900 border border-line dark:border-slate-800 rounded-full px-3 py-1.5 flex items-center gap-1 shadow-sm">
-                    <CheckCircle2 size={13} className="text-teal-500" /> {x}
-                  </span>
-                ))}
-              </div>
-            </motion.div>
-
-            <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.12, ease: EASE }} className="relative mt-9 max-w-3xl mx-auto">
-              <SearchBar query={query} locQuery={locQuery} setQuery={setQuery} setLocQuery={setLocQuery} onSearch={() => research()} loading={loading} />
-              <div className="mt-4 flex flex-wrap justify-center gap-3">
-                <button onClick={() => research()} className="bg-teal-500 hover:bg-teal-600 active:scale-[.98] text-white text-sm font-semibold px-6 py-3 rounded-full transition shadow-sm shadow-teal-500/30 flex items-center gap-2">
-                  <Sparkles size={15} /> Explore Opportunities
-                </button>
-                <button onClick={() => setView('tracker')} className="bg-white dark:bg-slate-900 border border-line dark:border-slate-700 hover:border-teal-400 text-sm font-semibold px-6 py-3 rounded-full transition flex items-center gap-2">
-                  <ClipboardList size={15} /> Track Applications
-                </button>
-              </div>
-            </motion.div>
-
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3, duration: 0.6 }} className="relative mt-6 flex flex-wrap justify-center gap-2 text-xs">
-              {ROLE_CHIPS.map(x => { const q = `${x} ${x.includes('Trainee') ? 'placement' : 'internship'} in India`; return <button key={x} onClick={() => { setQuery(q); research(q) }} className="bg-white/80 dark:bg-slate-900 border border-line dark:border-slate-800 hover:border-teal-400 hover:text-teal-600 dark:hover:text-teal-400 transition rounded-full px-3 py-1.5">{x}</button> })}
-            </motion.div>
-            {recent.length > 0 && <div className="relative mt-4 text-xs text-slate-500">Recent: {recent.map(r => <button key={r} onClick={() => research(r)} className="underline mr-2 hover:text-teal-600">{r}</button>)}</div>}
-
-            {/* Decorative animated opportunity cards (abstract — no fabricated data) */}
-            <div aria-hidden className="relative mt-10 max-w-3xl mx-auto hidden md:block">
-              <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35, duration: 0.7, ease: EASE }} className="grid grid-cols-3 gap-3">
-                {[
-                  { t: 'Frontend Intern', m: 'Remote • ₹20k/mo', d: '0.45' },
-                  { t: 'Data Analyst Trainee', m: 'Bengaluru • Hybrid', d: '0.65' },
-                  { t: 'SDE Placement', m: 'Pune • Full-time', d: '0.55' },
-                ].map((c, i) => (
-                  <motion.div key={c.t} animate={{ y: [0, -8, 0] }} transition={{ duration: 5 + i, repeat: Infinity, ease: 'easeInOut', delay: i * 0.6 }}
-                    className="surface rounded-2xl p-4 text-left shadow-sm shadow-navy-900/5">
-                    <div className="h-2 w-14 rounded-full bg-teal-500/80 mb-3" />
-                    <p className="font-bold text-sm text-navy-900 dark:text-white">{c.t}</p>
-                    <p className="text-[11px] text-muted mt-1">{c.m}</p>
-                    <div className="mt-3 h-1.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden"><div className="h-full bg-teal-500 rounded-full" style={{ width: `${Number(c.d) * 100}%` }} /></div>
-                  </motion.div>
-                ))}
+            {/* Left: message + search — search stays first in the mobile order */}
+            <div className="text-center lg:text-left">
+              <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, ease: EASE }}>
+                <span className="inline-flex items-center gap-2 text-[11px] font-semibold tracking-[0.18em] uppercase text-teal-700 dark:text-teal-400 bg-teal-50 dark:bg-teal-950/50 border border-teal-100 dark:border-teal-900 rounded-full px-3 py-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-teal-500 pulse-ring" /> Internship & Placement Portal
+                </span>
+                <h1 className="mt-5 font-display text-5xl md:text-6xl lg:text-[4.1rem]/[1.05] text-navy-900 dark:text-white text-balance">
+                  Your next opportunity <em className="text-teal-600 dark:text-teal-400 font-display italic">starts&nbsp;here.</em>
+                </h1>
+                <p className="mt-5 text-base md:text-lg text-muted dark:text-slate-300 max-w-xl lg:max-w-none mx-auto lg:mx-0 leading-relaxed">
+                  Discover verified internships, fresher jobs and campus placements across India — filter by role, skill and location, check scam warnings, and apply directly on the official company page.
+                </p>
+                <div className="mt-7 flex flex-wrap justify-center lg:justify-start gap-2 text-xs text-muted dark:text-slate-300">
+                  {['Real source links', 'No invented deadlines', 'Scam-payment warnings'].map(x => (
+                    <span key={x} className="bg-white dark:bg-slate-900 border border-line dark:border-slate-800 rounded-full px-3 py-1.5 flex items-center gap-1 shadow-sm">
+                      <CheckCircle2 size={13} className="text-teal-500" /> {x}
+                    </span>
+                  ))}
+                </div>
               </motion.div>
+
+              <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.12, ease: EASE }} className="relative mt-8">
+                <SearchBar query={query} locQuery={locQuery} setQuery={setQuery} setLocQuery={setLocQuery} onSearch={() => research()} loading={loading} />
+                <div className="mt-4 flex flex-wrap justify-center lg:justify-start gap-3">
+                  <button onClick={() => research()} className="bg-teal-500 hover:bg-teal-600 active:scale-[.98] text-white text-sm font-semibold px-6 py-3 rounded-full transition shadow-sm shadow-teal-500/30 flex items-center gap-2">
+                    <Sparkles size={15} /> Explore Opportunities
+                  </button>
+                  <button onClick={() => setView('tracker')} className="bg-white dark:bg-slate-900 border border-line dark:border-slate-700 hover:border-teal-400 text-sm font-semibold px-6 py-3 rounded-full transition flex items-center gap-2">
+                    <ClipboardList size={15} /> Track Applications
+                  </button>
+                </div>
+              </motion.div>
+
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3, duration: 0.6 }} className="relative mt-6 flex flex-wrap justify-center lg:justify-start gap-2 text-xs">
+                {ROLE_CHIPS.map(x => { const q = `${x} ${x.includes('Trainee') ? 'placement' : 'internship'} in India`; return <button key={x} onClick={() => { setQuery(q); research(q) }} className="bg-white/80 dark:bg-slate-900 border border-line dark:border-slate-800 hover:border-teal-400 hover:text-teal-600 dark:hover:text-teal-400 transition rounded-full px-3 py-1.5">{x}</button> })}
+              </motion.div>
+              {recent.length > 0 && <div className="relative mt-4 text-xs text-slate-500 text-center lg:text-left">Recent: {recent.map(r => <button key={r} onClick={() => research(r)} className="underline mr-2 hover:text-teal-600">{r}</button>)}</div>}
             </div>
 
-            <div className="relative mt-8 max-w-3xl mx-auto">
+            {/* Right: real campus photo with live stat chips (real derived counts, never fabricated) */}
+            <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2, duration: 0.7, ease: EASE }}
+              className="relative w-full max-w-md lg:max-w-none mx-auto">
+              <motion.div animate={{ y: [0, -10, 0] }} transition={{ duration: 7, repeat: Infinity, ease: 'easeInOut' }}
+                className="photo-frame photo-grade photo-scrim aspect-[4/4.6] lg:aspect-[4/4.4] shadow-xl shadow-navy-900/15">
+                <img src="/images/hero-students.webp"
+                  srcSet="/images/hero-students-sm.webp 760w, /images/hero-students.webp 1200w"
+                  sizes="(max-width: 1023px) 90vw, 44vw"
+                  alt="Students collaborating on laptops together at an outdoor table on a college campus"
+                  width={1200} height={799} loading="eager" fetchPriority="high" />
+              </motion.div>
+
+              <div className="absolute top-4 left-4 z-10 glass rounded-2xl px-4 py-2.5 shadow-lg shadow-navy-900/10">
+                <p className="text-xl font-extrabold text-navy-900 dark:text-white tnum leading-none">{openCount}</p>
+                <p className="text-[11px] text-muted mt-1 flex items-center gap-1"><Sparkles size={11} className="text-teal-500" /> Open roles</p>
+              </div>
+              <div className="absolute bottom-5 right-4 z-10 glass rounded-2xl px-4 py-2.5 shadow-lg shadow-navy-900/10">
+                <p className="text-xl font-extrabold text-navy-900 dark:text-white tnum leading-none">{companyCount}</p>
+                <p className="text-[11px] text-muted mt-1 flex items-center gap-1"><Building2 size={11} className="text-teal-500" /> Hiring companies</p>
+              </div>
+              <div className="absolute bottom-16 left-4 z-10 glass rounded-2xl px-4 py-2.5 shadow-lg shadow-navy-900/10 hidden sm:block">
+                <p className="text-xl font-extrabold text-navy-900 dark:text-white tnum leading-none">{trackerEntries.length}</p>
+                <p className="text-[11px] text-muted mt-1 flex items-center gap-1"><ClipboardList size={11} className="text-teal-500" /> Tracked by you</p>
+              </div>
+            </motion.div>
+
+            {/* Resume search spans both columns below the fold of the grid */}
+            <div className="lg:col-span-2 max-w-3xl w-full mx-auto">
               <div className="flex items-center gap-3 text-[11px] tracking-[0.18em] uppercase text-slate-400 mb-3"><span className="h-px flex-1 bg-line dark:bg-slate-800" />or let your resume do the searching<span className="h-px flex-1 bg-line dark:bg-slate-800" /></div>
               <ResumeUploader variant="card" onParsed={onResumeParsed} />
             </div>
@@ -599,7 +610,14 @@ export default function App() {
             <p className="text-slate-400 leading-relaxed">Listings link to original sources. Your data stays in this browser unless you sign in — then it is privately synced to your account. Never pay to apply.</p>
           </div>
         </div>
-        <p className="text-center text-xs text-slate-500 pb-8 px-4">FormSaathi • Internships & Placements • Researched listings persist to the cloud catalogue when Supabase is configured • Never share your API key publicly</p>
+        <p className="text-center text-xs text-slate-500 pb-3 px-4">FormSaathi • Internships & Placements • Researched listings persist to the cloud catalogue when Supabase is configured • Never share your API key publicly</p>
+        <p className="text-center text-[11px] text-slate-400 pb-8 px-4">
+          Photography by{' '}
+          <a href="https://www.pexels.com/photo/students-studying-on-laptop-outdoors-together-7972949/" target="_blank" rel="noreferrer" className="underline hover:text-teal-600">Pexels</a>
+          {' '}and{' '}
+          <a href="https://www.vecteezy.com/" target="_blank" rel="noreferrer" className="underline hover:text-teal-600">Vecteezy</a>
+          {' '}— used under their free licenses.
+        </p>
       </footer>
     </div>
   )

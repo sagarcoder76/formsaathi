@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
-import { Bookmark, Search, Trash2, ArrowRight, Cloud, HardDrive } from 'lucide-react'
+import { Search, Trash2, ArrowRight, Cloud, HardDrive } from 'lucide-react'
 import type { Opportunity, Stage, StudentProfile, TrackerEntry, ReportRecord } from '../types'
 import JobCard from './JobCard'
+import EmptyState from './EmptyState'
 
 interface Props {
   entries: TrackerEntry[]
@@ -49,13 +50,18 @@ export default function SavedView({ entries, reports, profile, uid, onOpen, onSa
       </motion.div>
 
       {entries.length === 0 ? (
-        <div className="mt-8 text-center py-20 bg-white dark:bg-slate-900 border border-dashed border-line dark:border-slate-700 rounded-3xl">
-          <div className="w-14 h-14 rounded-2xl bg-teal-50 dark:bg-teal-950/50 text-teal-600 flex items-center justify-center mx-auto"><Bookmark size={24} /></div>
-          <h2 className="font-bold text-lg mt-4">No saved opportunities yet</h2>
-          <p className="text-sm text-muted dark:text-slate-400 mt-1 max-w-sm mx-auto">Tap “Save” on any internship or placement to keep it here for later.</p>
-          <button onClick={onBrowse} className="mt-6 inline-flex items-center gap-2 bg-navy-900 hover:bg-navy-800 text-white text-sm font-semibold px-6 py-3 rounded-xl transition active:scale-[.98]">
-            Browse opportunities <ArrowRight size={15} />
-          </button>
+        <div className="mt-8">
+          <EmptyState
+            image="/images/empty-saved.webp"
+            imageAlt="Student sitting on a campus bench with a laptop and stacked notebooks"
+            title="Nothing saved yet"
+            body="Tap “Save” on any internship or placement to keep it here — synced to your account when you sign in, available offline in this browser otherwise."
+            action={
+              <button onClick={onBrowse} className="inline-flex items-center gap-2 bg-navy-900 hover:bg-navy-800 text-white text-sm font-semibold px-6 py-3 rounded-xl transition active:scale-[.98]">
+                Browse opportunities <ArrowRight size={15} />
+              </button>
+            }
+          />
         </div>
       ) : (
         <>
