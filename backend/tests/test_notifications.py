@@ -67,13 +67,16 @@ def test_email_and_push_dormant_without_env(monkeypatch):
 def test_cron_requires_secret(monkeypatch):
     monkeypatch.setenv("CRON_SECRET", "s3cret")
     for path in CRON_PATHS:
-        assert client.post(path).status_code == 401
-        assert client.post(path, headers={"authorization": "Bearer wrong"}).status_code == 401
+        # Vercel Cron calls these with GET; manual triggers may use POST.
+        for call in (client.get, client.post):
+            assert call(path).status_code == 401
+            assert call(path, headers={"authorization": "Bearer wrong"}).status_code == 401
 
 
 def test_cron_503_when_not_configured(monkeypatch):
     monkeypatch.delenv("CRON_SECRET", raising=False)
     for path in CRON_PATHS:
+        assert client.get(path).status_code == 503
         assert client.post(path).status_code == 503
 
 
@@ -81,7 +84,7 @@ def test_cron_runs_gracefully_without_supabase(monkeypatch):
     monkeypatch.setenv("CRON_SECRET", "s3cret")
     monkeypatch.setattr(n.supabase_store, "configured", lambda: False)
     for path in CRON_PATHS:
-        r = client.post(path, headers={"authorization": "Bearer s3cret"})
+        r = client.get(path, headers={"authorization": "Bearer s3cret"})
         assert r.status_code == 200
         assert r.json()["ran"] is False
 

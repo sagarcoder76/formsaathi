@@ -45,16 +45,21 @@ def require_cron(request:Request):
     if request.headers.get("authorization","")!=f"Bearer {secret}":
         raise HTTPException(status_code=401, detail="Invalid cron credentials.")
 
+# Vercel Cron invokes paths with GET and injects "Authorization: Bearer $CRON_SECRET";
+# POST is also accepted so the jobs can be triggered manually with the same credential.
+@app.get("/api/cron/deadline-reminders")
 @app.post("/api/cron/deadline-reminders")
 async def cron_deadline_reminders(request:Request):
     require_cron(request)
     return await notif_engine.run_deadline_reminders()
 
+@app.get("/api/cron/match-digest")
 @app.post("/api/cron/match-digest")
 async def cron_match_digest(request:Request):
     require_cron(request)
     return await notif_engine.run_match_digest()
 
+@app.get("/api/cron/followups")
 @app.post("/api/cron/followups")
 async def cron_followups(request:Request):
     require_cron(request)

@@ -36,7 +36,7 @@ Three alert kinds, each deliverable over three channels, with per-user toggles (
 
 Channels: in-app (Supabase `notifications`, real-time bell), email (Resend — dormant until `RESEND_API_KEY` is set) and browser Web Push (VAPID; Safari/unsupported browsers degrade gracefully). A `notification_events` ledger with a `unique(user_id, kind, dedup_key)` constraint guarantees every alert is sent at most once; zero-match digest days are still claimed so scans never repeat. The gear icon in the notification bell opens the preferences matrix and push opt-in.
 
-Scheduled jobs live in `vercel.json` (daily crons) and hit `POST /api/cron/deadline-reminders`, `/api/cron/match-digest`, `/api/cron/followups`, each protected by `Authorization: Bearer $CRON_SECRET`. Required env vars: `CRON_SECRET`, `VAPID_PUBLIC_KEY` (browser, exposed as `VITE_VAPID_PUBLIC_KEY`), `VAPID_PRIVATE_KEY` (server-only secret), `VAPID_SUBJECT` (`mailto:`), optional `RESEND_API_KEY` / `RESEND_FROM`. The service-role key and VAPID private key never leave the backend.
+Scheduled jobs live in `vercel.json` (daily/weekly crons) and hit `GET /api/cron/deadline-reminders`, `/api/cron/match-digest`, `/api/cron/followups` (POST is also accepted for manual runs), each protected by the `Authorization: Bearer $CRON_SECRET` header that Vercel attaches automatically. Required env vars: `CRON_SECRET`, `VAPID_PUBLIC_KEY` (browser, exposed as `VITE_VAPID_PUBLIC_KEY`), `VAPID_PRIVATE_KEY` (server-only secret), `VAPID_SUBJECT` (`mailto:`), optional `RESEND_API_KEY` / `RESEND_FROM`. The service-role key and VAPID private key never leave the backend.
 
 ## TinyFish docs verified (16 Oct 2026)
 - Search: `GET https://api.search.tinyfish.ai?query=&location=IN&language=en`
