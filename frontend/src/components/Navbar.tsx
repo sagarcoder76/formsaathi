@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Home, Briefcase, Building2, ClipboardList, Bookmark, UserCircle, Moon, Sun, Menu, X, LogOut, Bell, Sparkles } from 'lucide-react'
+import { Home, Briefcase, Building2, ClipboardList, Bookmark, UserCircle, Moon, Sun, Menu, X, LogOut, Bell, Sparkles, BarChart3, ShieldCheck } from 'lucide-react'
 import Logo from './Logo'
 import NotificationsBell from './NotificationsBell'
 import type { View } from '../types'
@@ -18,6 +18,7 @@ interface NavbarProps {
   authEnabled: boolean
   uid: string | null
   userEmail: string | null
+  isAdmin: boolean
   onSignIn: () => void
   onSignOut: () => void
 }
@@ -28,6 +29,7 @@ const ITEMS: { id: View; label: string; icon: typeof Home }[] = [
   { id: 'companies', label: 'Companies', icon: Building2 },
   { id: 'tracker', label: 'Tracker', icon: ClipboardList },
   { id: 'saved', label: 'Saved', icon: Bookmark },
+  { id: 'insights', label: 'Insights', icon: BarChart3 },
 ]
 
 const EASE = [0.22, 1, 0.36, 1] as const
@@ -45,6 +47,9 @@ export default function Navbar(p: NavbarProps) {
 
   // Navigation always flows through go(), which closes the mobile drawer itself.
   const go = (v: View) => { p.onNavigate(v); setMenuOpen(false) }
+  const navItems = p.isAdmin
+    ? [...ITEMS, { id: 'admin' as View, label: 'Moderation', icon: ShieldCheck }]
+    : ITEMS
 
   return (
     <header className={`sticky top-0 z-40 transition-all duration-300 glass border-b ${scrolled ? 'border-line dark:border-slate-800 shadow-sm shadow-navy-900/5' : 'border-transparent'}`}>
@@ -56,7 +61,7 @@ export default function Navbar(p: NavbarProps) {
 
         {/* Desktop navigation */}
         <nav className="ml-4 hidden lg:flex items-center gap-1" aria-label="Primary">
-          {ITEMS.map(item => {
+          {navItems.map(item => {
             const active = p.view === item.id
             const Icon = item.icon
             return (
@@ -127,7 +132,7 @@ export default function Navbar(p: NavbarProps) {
             <motion.nav initial={{ opacity: 0, y: -12, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -10, scale: 0.98 }}
               transition={{ duration: 0.24, ease: EASE }}
               className="lg:hidden absolute top-16 left-3 right-3 z-40 surface rounded-2xl shadow-xl shadow-navy-900/15 p-2.5" aria-label="Mobile">
-              {ITEMS.map((item, i) => {
+              {navItems.map((item, i) => {
                 const active = p.view === item.id
                 const Icon = item.icon
                 return (

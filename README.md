@@ -38,6 +38,12 @@ Channels: in-app (Supabase `notifications`, real-time bell), email (Resend — d
 
 Scheduled jobs live in `vercel.json` (daily/weekly crons) and hit `GET /api/cron/deadline-reminders`, `/api/cron/match-digest`, `/api/cron/followups` (POST is also accepted for manual runs), each protected by the `Authorization: Bearer $CRON_SECRET` header that Vercel attaches automatically. Required env vars: `CRON_SECRET`, `VAPID_PUBLIC_KEY` (browser, exposed as `VITE_VAPID_PUBLIC_KEY`), `VAPID_PRIVATE_KEY` (server-only secret), `VAPID_SUBJECT` (`mailto:`), optional `RESEND_API_KEY` / `RESEND_FROM`. The service-role key and VAPID private key never leave the backend.
 
+## Phase 4 — insights, catalogue health, PWA and moderation
+- **Insights dashboard** (`Insights` nav item): pure, deterministic analytics over the student's own tracker — application funnel, applied/interview/offer rates (with explicit denominators, shown as “—” until enough data exists), six-month pipeline activity, top skills/locations and upcoming deadlines. Empty inputs render empty states; nothing is estimated.
+- **Catalogue-health automation**: `GET /api/cron/catalogue-health` (daily 04:00 UTC) re-probes listings not checked for 3 days using the same HEAD→GET fallback and `ok | broken | unknown` classification as manual rechecks. Past deadlines flip to `expired`; three consecutive `broken` probes auto-hide a listing, and every student who saved it gets one preference-gated `health` notification (their tracker entry is kept). Bot walls/timeouts stay `unknown` and never count against a listing.
+- **Installable PWA**: `manifest.webmanifest`, generated 192/512/maskable/apple-touch icons, an installable standalone shell, network-first navigations with an `/offline.html` fallback and stale-while-revalidate caching for hashed assets. Supabase/API traffic is never cached. The service worker also remains the Web Push delivery path.
+- **Moderation queue**: `profiles.is_admin` gates a `Moderation` nav item and view (RLS-enforced in Postgres, not just hidden UI). Admins triage `listing_reports` (hide & resolve, dismiss, reopen), restore auto-hidden listings, and hidden rows disappear from the public catalogue for everyone except admins. A fourth preference row (`health_*`) controls listing-health alerts.
+
 ## TinyFish docs verified (16 Oct 2026)
 - Search: `GET https://api.search.tinyfish.ai?query=&location=IN&language=en`
 - Fetch: `POST https://api.fetch.tinyfish.ai` body `{urls[], format:"markdown", links:true}` (max 10)
@@ -78,9 +84,8 @@ Search (query is augmented with role/skills/location/type + “India”) → Fet
 
 ## Tests
 ```bash
-cd backend && python -m pytest tests/ -q   # 16 tests: dates, no-fabrication, expiry, SSRF guard, dedupe,
-                                           # portal classification, non-job drop, role/skill/location extraction,
-                                           # compensation parser + bands, fraud rules, filters
+cd backend && python -m pytest tests/ -q   # 44 tests: extraction/fraud/compensation/dedupe/filters,
+                                           # notification dispatch, dedup ledger, cron auth, catalogue health
 cd ../frontend && npm run build            # type-check + production build
 npm run lint                               # oxlint — 0 warnings
 ```
@@ -88,8 +93,10 @@ Live TinyFish Search/Fetch could not be tested here (no API key in this environm
 
 ## Structure
 ```
-backend/app/{main,tinyfish,extraction,models,demo_data}.py  backend/tests/
-frontend/src/{App.tsx,types.ts,index.css}
+backend/app/{main,tinyfish,extraction,models,demo_data,supabase_store,emailer,push,notifications,health}.py  backend/tests/
+frontend/src/{App.tsx,types.ts,index.css}  frontend/src/components/  frontend/src/lib/
+frontend/public/{sw.js,manifest.webmanifest,offline.html,icons/}
+supabase/migrations/0001_init.sql … 0004_phase4.sql
 ```
 
 ## 🌐 Go live on Vercel (public website)

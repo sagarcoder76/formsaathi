@@ -13,6 +13,9 @@ import App from './App.tsx'
 import { AuthProvider } from './lib/auth.tsx'
 import { ToastProvider } from './components/Toast.tsx'
 import ErrorBoundary from './components/ErrorBoundary.tsx'
+import { registerPWA } from './lib/pwa.ts'
+
+registerPWA()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

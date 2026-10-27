@@ -1,7 +1,6 @@
 import os, time
 from datetime import datetime, timezone
 from collections import defaultdict
-import httpx
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -9,8 +8,8 @@ from dotenv import load_dotenv
 load_dotenv()
 from .models import ResearchRequest, SearchRequest, ResearchResponse
 from . import tinyfish, supabase_store, notifications as notif_engine
-from . import emailer, push as push_lib
-from .extraction import extract_opportunity, dedupe, apply_filters, sort_opps, valid_url, classify_link_status
+from . import emailer, push as push_lib, health as catalogue_health
+from .extraction import extract_opportunity, dedupe, apply_filters, sort_opps, valid_url
 from .demo_data import DEMO
 
 app=FastAPI(title="FormSaathi Internship & Placement API", version="2.0.0")
@@ -65,6 +64,12 @@ async def cron_followups(request:Request):
     require_cron(request)
     return await notif_engine.run_followups()
 
+@app.get("/api/cron/catalogue-health")
+@app.post("/api/cron/catalogue-health")
+async def cron_catalogue_health(request:Request):
+    require_cron(request)
+    return await catalogue_health.run_catalogue_health()
+
 @app.get("/api/categories")
 def categories(): return {"categories":CATEGORIES}
 
@@ -94,24 +99,10 @@ async def recheck(payload:dict):
     opp_id=(payload.get("id") or "").strip()
     if not valid_url(url):
         raise HTTPException(status_code=400, detail="Invalid or disallowed URL.")
-    headers={"User-Agent":"Mozilla/5.0 (compatible; FormSaathiBot/1.0; +https://formsaathi-ten.vercel.app)"}
-    status_code=None; error=False
-    try:
-        async with httpx.AsyncClient(timeout=15, follow_redirects=True) as c:
-            try:
-                r=await c.head(url, headers=headers)
-                status_code=r.status_code
-                if status_code in (403,405,401):  # many sites reject HEAD — retry with GET
-                    r=await c.get(url, headers=headers)
-                    status_code=r.status_code
-            except httpx.HTTPError:
-                error=True
-    except Exception:
-        error=True
-    health=classify_link_status(status_code, error)
+    health = await catalogue_health.probe_url(url)
     if opp_id:
         await supabase_store.update_link_health(opp_id, health)
-    return {"url":url,"status_code":status_code,"link_health":health,"checked_at":datetime.now(timezone.utc).isoformat()}
+    return {"url":url,"link_health":health,"checked_at":datetime.now(timezone.utc).isoformat()}
 
 @app.post("/api/opportunities/research", response_model=ResearchResponse)
 async def research(req:ResearchRequest):

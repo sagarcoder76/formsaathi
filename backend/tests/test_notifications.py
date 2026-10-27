@@ -10,7 +10,8 @@ from app import notifications as n
 from app import emailer, push
 
 client = TestClient(app)
-CRON_PATHS = ["/api/cron/deadline-reminders", "/api/cron/match-digest", "/api/cron/followups"]
+CRON_PATHS = ["/api/cron/deadline-reminders", "/api/cron/match-digest",
+              "/api/cron/followups", "/api/cron/catalogue-health"]
 
 
 # ---------- pure logic ----------

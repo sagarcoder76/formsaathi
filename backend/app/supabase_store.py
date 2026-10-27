@@ -52,13 +52,20 @@ async def upsert_opportunities(opps: Iterable[Opportunity]) -> int:
 async def update_link_health(opportunity_id: str, health: str) -> bool:
     if not configured():
         return False
+    return await patch_opportunity(opportunity_id, {"link_health": health})
+
+
+async def patch_opportunity(opportunity_id: str, fields: dict) -> bool:
+    """Service-role partial update of one catalogue row (moderation/health)."""
+    if not configured() or not fields:
+        return False
     url, headers = _client()
     headers["Prefer"] = "return=minimal"
     try:
         async with httpx.AsyncClient(timeout=10) as c:
             r = await c.patch(
                 f"{url}/rest/v1/opportunities?id=eq.{opportunity_id}",
-                json={"link_health": health},
+                json=fields,
                 headers=headers,
             )
             r.raise_for_status()

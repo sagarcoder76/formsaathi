@@ -5,7 +5,7 @@ import type { Opportunity, ResearchResponse, Stage, TrackerEntry, StudentProfile
 import { LS, formatSkill, verifyLabel, statusLabel, typeBadgeCls, inCompBand, COMP_BANDS, matchScore, matchColor, downloadIcs, nowIso, isErrorListing, STAGE_LABEL } from './lib/helpers'
 import { buildResumeQuery, type ParsedResume } from './lib/resume'
 import { useAuth } from './lib/auth'
-import { migrateLocalToCloud, pullCloudTracker, upsertSaved, deleteSaved, insertReport, listSavedSearches, createSavedSearch, deleteSavedSearch, listNotifications, createNotification } from './lib/cloud'
+import { migrateLocalToCloud, pullCloudTracker, upsertSaved, deleteSaved, insertReport, listSavedSearches, createSavedSearch, deleteSavedSearch, listNotifications, createNotification, getIsAdmin } from './lib/cloud'
 import ProfileModal from './components/ProfileModal'
 import TrackerBoard from './components/TrackerBoard'
 import ReportModal from './components/ReportModal'
@@ -18,6 +18,8 @@ import JobCard from './components/JobCard'
 import SearchBar from './components/SearchBar'
 import FilterPanel from './components/FilterPanel'
 import SavedView from './components/SavedView'
+import InsightsView from './components/InsightsView'
+import AdminView from './components/AdminView'
 import Modal from './components/Modal'
 import Logo from './components/Logo'
 import { useToast } from './components/Toast'
@@ -39,6 +41,7 @@ export default function App() {
   const { enabled: authEnabled, session, userEmail, signOut } = useAuth()
   const uid = session?.user.id ?? null
   const toast = useToast()
+  const [isAdmin, setIsAdmin] = useState(false)
   const [dark, setDark] = useState(() => LS('fs-dark', false))
   const [view, setView] = useState<View>('home')
   const [query, setQuery] = useState('Software engineering internships for students in India')
@@ -100,6 +103,14 @@ export default function App() {
       notifiedLinks.current = new Set((notifs as CloudNotification[]).map(x => x.link ?? ''))
     })()
     return () => { cancelled = true }
+  }, [uid])
+
+  // Admin role gates the Moderation nav item and view; RLS enforces it server-side regardless.
+  useEffect(() => {
+    if (!uid) { setIsAdmin(false); return }
+    let alive = true
+    getIsAdmin(uid).then(admin => { if (alive) setIsAdmin(admin) }).catch(() => { if (alive) setIsAdmin(false) })
+    return () => { alive = false }
   }, [uid])
 
   const setStage = (o: Opportunity, stage: Stage) => {
@@ -246,6 +257,7 @@ export default function App() {
       <Navbar view={view} onNavigate={setView} trackerCount={activeEntries.length} savedCount={savedEntries.length}
         profileFilled={profile.filled} onOpenProfile={() => setProfileOpen(true)} onFindJobs={() => research()}
         dark={dark} onToggleDark={() => setDark(!dark)} authEnabled={authEnabled} uid={uid} userEmail={userEmail}
+        isAdmin={isAdmin}
         onSignIn={() => setAuthOpen(true)} onSignOut={() => void signOut()} />
 
       {demo && health && !health.tinyfish_configured && (
@@ -476,6 +488,23 @@ export default function App() {
         <SavedView entries={savedEntries} reports={reports} profile={profile} uid={uid}
           onOpen={setSelected} onSave={toggleSave} onStage={setStage} onBrowse={() => setView('jobs')}
           onClearAll={() => { if (savedEntries.length && confirm('Clear all saved listings?')) savedEntries.forEach(e => removeTracker(e.job.id)) }} />
+      )}
+
+      {/* ============================== INSIGHTS ============================== */}
+      {view === 'insights' && (
+        <InsightsView entries={trackerEntries} onBrowse={() => setView('jobs')} />
+      )}
+
+      {/* ============================== ADMIN MODERATION ============================== */}
+      {view === 'admin' && (
+        isAdmin && uid
+          ? <AdminView uid={uid} />
+          : (
+            <main className="max-w-7xl mx-auto px-4 sm:px-6 py-16 text-center">
+              <h1 className="text-2xl font-bold text-navy-900 dark:text-white">Admins only</h1>
+              <p className="text-sm text-muted mt-2">This area is restricted to FormSaathi moderators. Database policies block every action for non-admins.</p>
+            </main>
+          )
       )}
 
       {/* ============================== DETAILS MODAL ============================== */}
