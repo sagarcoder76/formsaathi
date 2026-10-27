@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Home, Briefcase, Building2, ClipboardList, Bookmark, UserCircle, Moon, Sun, Menu, X, LogOut, Bell, Sparkles, BarChart3, ShieldCheck } from 'lucide-react'
+import { Home, Briefcase, Building2, ClipboardList, Bookmark, UserCircle, Moon, Sun, Menu, X, LogOut, LogIn, Sparkles, BarChart3, ShieldCheck } from 'lucide-react'
 import Logo from './Logo'
 import NotificationsBell from './NotificationsBell'
 import type { View } from '../types'
@@ -87,8 +87,8 @@ export default function Navbar(p: NavbarProps) {
 
         <div className="ml-auto flex items-center gap-1.5">
           <button onClick={p.onFindJobs}
-            className="hidden md:inline-flex items-center gap-2 bg-teal-500 hover:bg-teal-600 active:scale-[.97] text-white text-sm font-semibold px-5 py-2.5 rounded-full transition-all duration-200 shadow-sm shadow-teal-500/30">
-            <Sparkles size={15} /> Find Opportunities
+            className="hidden md:inline-flex items-center gap-1.5 whitespace-nowrap bg-teal-500 hover:bg-teal-600 active:scale-[.97] text-white text-[13px] font-semibold px-4 py-2 rounded-full transition-all duration-200">
+            <Sparkles size={14} /> Find Opportunities
           </button>
           <button onClick={p.onOpenProfile} title="Your profile" aria-label="Your profile"
             className={`p-2 rounded-xl transition-colors hover:bg-slate-100 dark:hover:bg-slate-800 ${p.profileFilled ? 'text-teal-600 dark:text-teal-400' : 'text-muted dark:text-slate-400'}`}>
@@ -104,8 +104,8 @@ export default function Navbar(p: NavbarProps) {
             </span>
           ) : (
             <button onClick={p.onSignIn}
-              className="hidden sm:inline-flex items-center gap-1.5 bg-navy-900 hover:bg-navy-800 active:scale-[.97] text-white text-sm font-semibold px-4 py-2 rounded-full transition-all duration-200">
-              <Bell size={14} /> Sign in
+              className="hidden sm:inline-flex items-center gap-1.5 whitespace-nowrap border border-navy-900/15 dark:border-slate-700 text-navy-900 dark:text-white text-[13px] font-semibold px-4 py-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-[.97] transition-all duration-200">
+              <LogIn size={14} /> Sign in
             </button>
           ))}
           <button onClick={p.onToggleDark} title="Toggle dark mode" aria-label="Toggle dark mode"
@@ -148,7 +148,7 @@ export default function Navbar(p: NavbarProps) {
               <div className="border-t border-line dark:border-slate-800 mt-2 pt-2 px-2 pb-1 flex flex-col gap-2">
                 <button onClick={() => { p.onFindJobs(); setMenuOpen(false) }} className="bg-teal-500 hover:bg-teal-600 text-white text-sm font-semibold px-4 py-3 rounded-xl transition active:scale-[.98]">Find Opportunities</button>
                 {p.authEnabled && !p.uid && (
-                  <button onClick={() => { p.onSignIn(); setMenuOpen(false) }} className="bg-navy-900 hover:bg-navy-800 text-white text-sm font-semibold px-4 py-3 rounded-xl transition active:scale-[.98]">Sign in / Create account</button>
+                  <button onClick={() => { p.onSignIn(); setMenuOpen(false) }} className="bg-navy-900 hover:bg-navy-800 text-white text-sm font-semibold px-4 py-3 rounded-xl transition active:scale-[.98] flex items-center justify-center gap-2"><LogIn size={15} /> Sign in / Create account</button>
                 )}
                 {p.authEnabled && p.uid && (
                   <button onClick={() => { p.onSignOut(); setMenuOpen(false) }} className="border border-line dark:border-slate-700 text-sm font-semibold px-4 py-3 rounded-xl flex items-center justify-center gap-2">
