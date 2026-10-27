@@ -256,10 +256,12 @@ export default function App() {
 
       {/* ============================== HOME ============================== */}
       {view === 'home' && (
-        <main className="max-w-7xl mx-auto px-4 sm:px-6">
-          <section className="relative text-center py-14 md:py-20 overflow-hidden">
-            <div aria-hidden className="pointer-events-none absolute -top-24 -left-24 w-96 h-96 rounded-full bg-teal-300/25 dark:bg-teal-500/15 blur-3xl anim-aurora" />
-            <div aria-hidden className="pointer-events-none absolute -top-10 -right-24 w-96 h-96 rounded-full bg-navy-300/25 dark:bg-navy-600/20 blur-3xl anim-aurora" style={{ animationDelay: '-7s' }} />
+        <>
+        {/* Full-bleed hero: the section spans edge-to-edge; only its inner content is max-width centered. */}
+        <section className="relative w-full overflow-hidden bg-gradient-to-b from-mint/90 via-mint/40 to-canvas dark:from-teal-950/25 dark:via-navy-950/40 dark:to-[#070d1f] border-b border-line/70 dark:border-slate-800/70">
+          <div aria-hidden className="pointer-events-none absolute -top-24 -left-24 w-96 h-96 rounded-full bg-teal-300/25 dark:bg-teal-500/15 blur-3xl anim-aurora" />
+          <div aria-hidden className="pointer-events-none absolute -top-10 -right-24 w-96 h-96 rounded-full bg-navy-300/25 dark:bg-navy-600/20 blur-3xl anim-aurora" style={{ animationDelay: '-7s' }} />
+          <div className="relative max-w-7xl mx-auto px-4 sm:px-6 text-center py-14 md:py-20">
 
             <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, ease: EASE }} className="relative">
               <span className="inline-flex items-center gap-2 text-[11px] font-semibold tracking-[0.18em] uppercase text-teal-700 dark:text-teal-400 bg-teal-50 dark:bg-teal-950/50 border border-teal-100 dark:border-teal-900 rounded-full px-3 py-1.5">
@@ -320,8 +322,11 @@ export default function App() {
               <div className="flex items-center gap-3 text-[11px] tracking-[0.18em] uppercase text-slate-400 mb-3"><span className="h-px flex-1 bg-line dark:bg-slate-800" />or let your resume do the searching<span className="h-px flex-1 bg-line dark:bg-slate-800" /></div>
               <ResumeUploader variant="card" onParsed={onResumeParsed} />
             </div>
+          </div>
           </section>
 
+          {/* Remaining home sections stay in the centered reading column */}
+          <main className="max-w-7xl mx-auto px-4 sm:px-6">
           {!profile.filled && !hideProfilePrompt && (
             <motion.div {...sectionMotion} className="max-w-3xl mx-auto bg-teal-50 dark:bg-teal-950/40 border border-teal-100 dark:border-teal-900 rounded-2xl px-5 py-4 flex flex-wrap items-center gap-3">
               <UserCircle size={22} className="text-teal-600 shrink-0" />
@@ -382,7 +387,8 @@ export default function App() {
               </div>
             ))}
           </motion.section>
-        </main>
+          </main>
+        </>
       )}
 
       {/* ============================== JOBS ============================== */}
