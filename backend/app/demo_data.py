@@ -1,9 +1,96 @@
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date, timedelta
 from .models import Opportunity
+from .extraction import deadline_status
+
 NOW=datetime.now(timezone.utc).isoformat()
+
+def _iso(days_from_today:int)->str:
+    return (date.today()+timedelta(days=days_from_today)).isoformat()
+
 # Clearly-labelled DEMO records — NOT live results. Replace by live research when key configured.
 DEMO=[
- Opportunity(id="demo-1",title="[DEMO] Sample Hackathon — Replace with live results",category="Hackathon",organizer="Demo Organizer (sample)",description="Sample record shown only in demo mode (no TinyFish key). Add TINYFISH_API_KEY to backend/.env and click Search the Web for real opportunities.",eligibility=["Demo eligibility text — not a real listing"],location="India",mode="Online",deadline=None,deadline_text=None,deadline_status="unknown",fees="Free (demo)",official_url="https://example.com",source_url="https://example.com",source_type="demo",source_domain="example.com",last_checked_at=NOW,verification_status="demo"),
- Opportunity(id="demo-2",title="[DEMO] Sample Scholarship — Replace with live results",category="Scholarship",organizer="Demo Organizer (sample)",description="Sample record for UI testing only. It is not a real scholarship and example.com is not an application page.",eligibility=["Demo only"],location="India",mode="Online",deadline=None,deadline_status="unknown",fees=None,official_url="https://example.com",source_url="https://example.com",source_type="demo",source_domain="example.com",last_checked_at=NOW,verification_status="demo"),
- Opportunity(id="demo-3",title="[DEMO] Sample Remote Internship — Replace with live results",category="Internship",organizer="Demo Organizer (sample)",description="Sample record for UI testing only.",eligibility=["Demo only"],location="Remote",mode="Remote",deadline=None,deadline_status="unknown",fees=None,official_url="https://example.com",source_url="https://example.com",source_type="demo",source_domain="example.com",last_checked_at=NOW,verification_status="demo"),
+ Opportunity(
+  id="demo-1",
+  title="[DEMO] Software Engineering Intern — React/TypeScript",
+  category="Internship", role="Frontend Developer",
+  organizer="NimbusLabs Technologies (sample)",
+  description="Sample record shown only in demo mode. Help build customer-facing React components, write TypeScript, and pair with senior engineers in agile sprints. Add TINYFISH_API_KEY to backend/.env for real listings.",
+  skills=["react","typescript","javascript","html","css","git"],
+  eligibility=["Demo only — pursuing B.Tech/B.E. in Computer Science or related field","Available for a 6-month internship in Bengaluru"],
+  location="Bengaluru", mode="Hybrid",
+  deadline=_iso(12), deadline_text=None, deadline_status=deadline_status(_iso(12)),
+  compensation="₹25,000/month stipend",
+  application_url="https://example.com/apply/software-intern",
+  official_url=None, source_url="https://example.com/jobs/software-intern",
+  source_type="demo", source_domain="example.com", last_checked_at=NOW, verification_status="demo"),
+ Opportunity(
+  id="demo-2",
+  title="[DEMO] Data Analyst Intern (Remote)",
+  category="Internship", role="Data Analyst",
+  organizer="FinEdge Analytics (sample)",
+  description="Sample record for UI testing only — not a real opening. Build dashboards, clean datasets and present insights to the growth team. example.com is not an application page.",
+  skills=["sql","excel","power bi","python","communication"],
+  eligibility=["Demo only — students with SQL and Excel basics","Strong communication for stakeholder updates"],
+  location="Remote", mode="Remote",
+  deadline=_iso(40), deadline_text=None, deadline_status=deadline_status(_iso(40)),
+  compensation="₹15,000/month stipend",
+  application_url="https://example.com/apply/data-analyst-intern",
+  official_url=None, source_url="https://example.com/jobs/data-analyst-intern",
+  source_type="demo", source_domain="example.com", last_checked_at=NOW, verification_status="demo"),
+ Opportunity(
+  id="demo-3",
+  title="[DEMO] Graduate Engineer Trainee — Mechanical (Campus Placement 2026)",
+  category="Placement", role="Graduate Engineer Trainee",
+  organizer="IndCore Manufacturing Ltd (sample)",
+  description="Sample placement record for UI testing only. Join the plant engineering team after a structured 12-month training rotation across design, production and quality.",
+  skills=["autocad","solidworks","matlab","problem solving"],
+  eligibility=["Demo only — B.Tech Mechanical, 2026 passing batch","No active backlogs at time of joining"],
+  location="Pune", mode="In-person",
+  deadline=_iso(70), deadline_text=None, deadline_status=deadline_status(_iso(70)),
+  compensation="CTC ₹6.5 LPA",
+  application_url="https://example.com/apply/get-mechanical",
+  official_url=None, source_url="https://example.com/jobs/get-mechanical",
+  source_type="demo", source_domain="example.com", last_checked_at=NOW, verification_status="demo"),
+ Opportunity(
+  id="demo-4",
+  title="[DEMO] Product Management Intern",
+  category="Internship", role="Product Manager",
+  organizer="Kartwave Internet (sample)",
+  description="Sample record for UI testing only. Own discovery tasks, write PRDs, analyse funnel data and coordinate launches with design and engineering.",
+  skills=["product management","excel","communication","sql","presentation skills"],
+  eligibility=["Demo only — penultimate-year students from any stream","Demonstrated interest in building digital products"],
+  location="Gurugram", mode="Hybrid",
+  deadline=None, deadline_text=None, deadline_status="unknown",
+  compensation="Unpaid — internship certificate and mentor feedback",
+  application_url="https://example.com/apply/pm-intern",
+  official_url=None, source_url="https://example.com/jobs/pm-intern",
+  source_type="demo", source_domain="example.com", last_checked_at=NOW, verification_status="demo"),
+ Opportunity(
+  id="demo-5",
+  title="[DEMO] Full Stack Developer — Node.js & React",
+  category="Placement", role="Full Stack Developer",
+  organizer="CloudPeak Software (sample)",
+  description="Sample placement record for UI testing only. Build and operate microservices powering our SaaS platform, from REST APIs to the React admin console.",
+  skills=["node.js","react","postgresql","docker","aws","typescript"],
+  eligibility=["Demo only — B.Tech/M.Tech CS or equivalent, 2025/2026 batch","Hands-on project experience with Node.js and React"],
+  location="Hyderabad", mode="In-person",
+  deadline=_iso(6), deadline_text=None, deadline_status=deadline_status(_iso(6)),
+  compensation="₹12 LPA",
+  application_url="https://example.com/apply/full-stack-developer",
+  official_url=None, source_url="https://example.com/jobs/full-stack-developer",
+  source_type="demo", source_domain="example.com", last_checked_at=NOW, verification_status="demo"),
+ Opportunity(
+  id="demo-6",
+  title="[DEMO] Digital Marketing Intern",
+  category="Internship", role="Marketing",
+  organizer="Bharat Breads Foods (sample)",
+  description="Sample record for UI testing only. Run SEO and social campaigns, track performance in Google Analytics and draft content for launch weeks.",
+  skills=["digital marketing","seo","content writing","google analytics","communication"],
+  eligibility=["Demo only — marketing/mass-media students or self-taught candidates","Basic familiarity with social media analytics"],
+  location="Mumbai", mode="Remote",
+  deadline=_iso(25), deadline_text=None, deadline_status=deadline_status(_iso(25)),
+  compensation="₹10,000/month stipend + performance incentives",
+  application_url="https://example.com/apply/marketing-intern",
+  official_url=None, source_url="https://example.com/jobs/marketing-intern",
+  source_type="demo", source_domain="example.com", last_checked_at=NOW, verification_status="demo"),
 ]

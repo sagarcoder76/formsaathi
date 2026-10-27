@@ -1,35 +1,38 @@
 from pydantic import BaseModel, Field
 from typing import Optional, List, Literal
 
-Category = Literal["Scholarship","Internship","Hackathon","Coding Competition","Innovation Challenge","Fellowship","Workshop","Conference","Free Course","Government Programme","Job","Other"]
-Mode = Optional[Literal["Online","Remote","Hybrid","In-person","Unknown"]]
+# FormSaathi is an internship & placement portal: only these two listing types exist.
+Category = Literal["Internship", "Placement"]
 
 class Opportunity(BaseModel):
     id: str
     title: str
-    category: str = "Other"
-    organizer: Optional[str] = None
+    category: str = "Internship"  # Internship | Placement
+    role: Optional[str] = None    # e.g. "Frontend Developer", "Data Analyst"
+    organizer: Optional[str] = None  # hiring company / organisation
     description: Optional[str] = None
+    skills: List[str] = []
     eligibility: List[str] = []
     location: Optional[str] = None
-    mode: Optional[str] = "Unknown"
-    deadline: Optional[str] = None  # ISO date or None
+    mode: Optional[str] = "Unknown"  # Remote | Hybrid | In-person | Online | Unknown
+    deadline: Optional[str] = None   # ISO date or None (never invented)
     deadline_text: Optional[str] = None
-    deadline_status: Literal["open","expired","unknown","closing_soon"] = "unknown"
-    fees: Optional[str] = None
-    benefits: Optional[str] = None
+    deadline_status: Literal["open", "expired", "unknown", "closing_soon"] = "unknown"
+    compensation: Optional[str] = None  # stipend / salary / CTC, exactly as stated on the page
     official_url: Optional[str] = None
     application_url: Optional[str] = None
     source_url: str
-    source_type: Literal["official","secondary","demo","unknown"] = "unknown"
+    source_type: Literal["official", "secondary", "demo", "unknown"] = "unknown"
     source_domain: Optional[str] = None
     last_checked_at: str
-    verification_status: Literal["verified_official","secondary_source","needs_review","demo"] = "needs_review"
+    verification_status: Literal["verified_official", "secondary_source", "needs_review", "demo"] = "needs_review"
     also_found_on: List[str] = []
 
 class ResearchRequest(BaseModel):
     query: str = Field(min_length=3, max_length=300)
-    category: Optional[str] = None
+    category: Optional[str] = None  # Internship | Placement
+    role: Optional[str] = None
+    skills: List[str] = []
     location: Optional[str] = None
     mode: Optional[str] = None
     max_fetch: int = Field(default=5, ge=1, le=8)
@@ -38,10 +41,11 @@ class ResearchRequest(BaseModel):
 class SearchRequest(BaseModel):
     query: str = Field(min_length=2, max_length=300)
     category: Optional[str] = None
+    role: Optional[str] = None
+    skill: Optional[str] = None
     location: Optional[str] = None
     mode: Optional[str] = None
-    deadline: Optional[str] = None  # all|upcoming|unknown
-    fee: Optional[str] = None  # all|free|paid
+    deadline: Optional[str] = None  # all|upcoming|unknown|expired
     sort: str = "relevance"
     opportunities: List[Opportunity] = []  # client passes current results to filter locally on server
 
