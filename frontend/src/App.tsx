@@ -2,9 +2,12 @@ import { useEffect, useMemo, useState } from 'react'
 import { Search, Bookmark, BookmarkCheck, ExternalLink, Moon, Sun, Home, Briefcase, MapPin, Clock, ShieldCheck, ShieldAlert, AlertTriangle, Trash2, Filter, ArrowRight, Building2, Banknote, X, CheckCircle2, CalendarPlus, UserCircle, ClipboardList, Flag } from 'lucide-react'
 import type { Opportunity, ResearchResponse, Stage, TrackerEntry, StudentProfile, ReportRecord } from './types'
 import { LS, formatSkill, verifyLabel, statusLabel, statusClass, deadlineLine, typeBadgeCls, inCompBand, COMP_BANDS, matchScore, matchColor, downloadIcs } from './lib/helpers'
+import { buildResumeQuery, type ParsedResume } from './lib/resume'
 import ProfileModal from './components/ProfileModal'
 import TrackerBoard from './components/TrackerBoard'
 import ReportModal from './components/ReportModal'
+import ResumeUploader from './components/ResumeUploader'
+import ResumeReviewModal from './components/ResumeReviewModal'
 
 const JOB_TYPES=['Internship','Placement'] as const
 const ROLE_CHIPS=['Frontend Developer','Data Analyst','Full Stack Developer','Digital Marketing','Graduate Engineer Trainee']
@@ -50,7 +53,7 @@ function JobCard({o,entry,reported,profile,onOpen,onSave,onStage}:{o:Opportunity
  </article>)}
 
 interface FilterPanelProps{
- typeFilter:string;roleFilter:string;skillFilter:string;locFilter:string;modeFilter:string;deadlineFilter:string;compBand:string;sort:string
+ typeFilter:string;roleFilter:string;skillFilter:string;locFilter:string;modeFilter:string;deadlineFilter:string;compBand:string;sort:string;profileFilled:boolean
  roleOptions:string[];skillOptions:string[];locationOptions:string[]
  set:(k:string,v:string)=>void;onClear:()=>void
 }
@@ -66,7 +69,7 @@ function FilterPanel(p:FilterPanelProps){
   <div><label className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Work mode</label><select value={p.modeFilter} onChange={e=>p.set('mode',e.target.value)} className={selectCls+' mt-1'}><option value="">Any mode</option><option>Remote</option><option>Hybrid</option><option>In-person</option></select></div>
   <div><label className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Compensation</label><select value={p.compBand} onChange={e=>p.set('comp',e.target.value)} className={selectCls+' mt-1'}><option value="">Any compensation</option>{COMP_BANDS.map(b=><option key={b.value} value={b.value}>{b.label}</option>)}</select></div>
   <div><label className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Deadline</label><select value={p.deadlineFilter} onChange={e=>p.set('deadline',e.target.value)} className={selectCls+' mt-1'}><option value="">Any deadline</option><option value="upcoming">Open / closing soon</option><option value="unknown">Unknown</option><option value="expired">Expired</option></select></div>
-  <div><label className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Sort by</label><select value={p.sort} onChange={e=>p.set('sort',e.target.value)} className={selectCls+' mt-1'}><option value="relevance">Relevance</option><option value="deadline">Deadline (soonest)</option><option value="recent">Recently checked</option></select></div>
+  <div><label className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Sort by</label><select value={p.sort} onChange={e=>p.set('sort',e.target.value)} className={selectCls+' mt-1'}><option value="relevance">Relevance</option>{p.profileFilled&&<option value="match">Best match for you</option>}<option value="deadline">Deadline (soonest)</option><option value="recent">Recently checked</option></select></div>
   <button onClick={p.onClear} className="text-sm underline text-slate-500">Clear all filters</button>
  </aside>)}
 
@@ -91,6 +94,7 @@ export default function App(){
  const [profile,setProfile]=useState<StudentProfile>(()=>LS('fs-profile',EMPTY_PROFILE))
  const [reports,setReports]=useState<Record<string,ReportRecord>>(()=>LS('fs-reports',{}))
  const [profileOpen,setProfileOpen]=useState(false); const [reportTarget,setReportTarget]=useState<Opportunity|null>(null); const [hideProfilePrompt,setHideProfilePrompt]=useState(false)
+ const [uploaderOpen,setUploaderOpen]=useState(false); const [resumeParsed,setResumeParsed]=useState<ParsedResume|null>(null); const [resumeName,setResumeName]=useState('')
  const [recent,setRecent]=useState<string[]>(()=>LS('fs-recent',[]))
  const [loading,setLoading]=useState(false); const [error,setError]=useState(''); const [stats,setStats]=useState<Record<string,number>|null>(null); const [cached,setCached]=useState(false); const [demo,setDemo]=useState(false); const [warnings,setWarnings]=useState<string[]>([]); const [visible,setVisible]=useState(9); const [health,setHealth]=useState<Record<string,unknown>|null>(null)
 
@@ -112,12 +116,20 @@ export default function App(){
  const updateNotes=(id:string,notes:string)=>setTracker(p=>({...p,[id]:{...p[id],notes,updatedAt:new Date().toISOString()}}))
  const toggleSave=(o:Opportunity)=>tracker[o.id]?.stage==='saved'?removeTracker(o.id):setStage(o,'saved')
  const submitReport=(reason:string)=>{ if(reportTarget){setReports(p=>({...p,[reportTarget.id]:{reason,at:new Date().toISOString()}}));setReportTarget(null)} }
+ const onResumeParsed=(parsed:ParsedResume,fileName:string)=>{setResumeParsed(parsed);setResumeName(fileName);setUploaderOpen(false)}
+ const onResumeConfirm=(p:StudentProfile,role:string|null,category:''|'Internship'|'Placement')=>{
+   setProfile(p);setResumeParsed(null)
+   const loc=p.locations[0]??''
+   const q=buildResumeQuery(p,role,category)
+   setQuery(q);if(loc)setLocQuery(loc);setSort('match')
+   research(q,loc,{role,skills:p.skills,category:category||null})
+ }
 
- async function research(q=query,loc=locQuery){
+ async function research(q=query,loc=locQuery,opts:{role?:string|null;skills?:string[];category?:string|null}={}){
    if(q.trim().length<3){setError('Please enter at least 3 characters to search.');return}
    setLoading(true);setError('');setView('jobs')
    try{
-     const r=await fetch('/api/opportunities/research',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query:q,category:typeFilter||null,location:loc||null,max_fetch:5})})
+     const r=await fetch('/api/opportunities/research',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query:q,category:(opts.category??typeFilter)||null,role:opts.role??null,skills:opts.skills??[],location:loc||null,max_fetch:5})})
      if(!r.ok){const e=await r.json().catch(()=>({})); throw new Error((e as {detail?:string}).detail||`Backend error ${r.status}`)}
      const data:ResearchResponse=await r.json()
      setResults(data.opportunities);setStats(data.stats);setCached(data.cached);setDemo(data.demo_mode);setWarnings(data.warnings||[]);setVisible(9)
@@ -141,9 +153,10 @@ export default function App(){
    if(deadlineFilter==='upcoming') out=out.filter(o=>['open','closing_soon'].includes(o.deadline_status))
    if(deadlineFilter==='unknown') out=out.filter(o=>o.deadline_status==='unknown')
    if(deadlineFilter==='expired') out=out.filter(o=>o.deadline_status==='expired')
+   if(sort==='match') out.sort((a,b)=>(matchScore(b,profile)?.score??-1)-(matchScore(a,profile)?.score??-1))
    if(sort==='deadline') out.sort((a,b)=>(a.deadline||'9999').localeCompare(b.deadline||'9999'))
    if(sort==='recent') out.sort((a,b)=>b.last_checked_at.localeCompare(a.last_checked_at))
-   return out},[results,typeFilter,roleFilter,skillFilter,locFilter,modeFilter,deadlineFilter,compBand,sort])
+   return out},[results,typeFilter,roleFilter,skillFilter,locFilter,modeFilter,deadlineFilter,compBand,sort,profile])
 
  const clearFilters=()=>{setTypeFilter('');setRoleFilter('');setSkillFilter('');setLocFilter('');setModeFilter('');setDeadlineFilter('');setCompBand('');setSort('relevance')}
  const openCount=results.filter(o=>['open','closing_soon'].includes(o.deadline_status)).length
@@ -183,6 +196,10 @@ export default function App(){
      <div className="relative mt-9 max-w-3xl mx-auto"><SearchBar query={query} locQuery={locQuery} setQuery={setQuery} setLocQuery={setLocQuery} onSearch={()=>research()} loading={loading}/></div>
      <div className="relative mt-5 flex flex-wrap justify-center gap-2 text-xs">{ROLE_CHIPS.map(x=>{const q=`${x} ${x.includes('Trainee')?'placement':'internship'} in India`;return <button key={x} onClick={()=>{setQuery(q);research(q)}} className="bg-white/80 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-teal-400 hover:text-teal-600 transition rounded-full px-3 py-1.5">{x}</button>})}</div>
      {recent.length>0&&<div className="mt-4 text-xs text-slate-500">Recent: {recent.map(r=><button key={r} onClick={()=>research(r)} className="underline mr-2">{r}</button>)}</div>}
+     <div className="relative mt-7 max-w-3xl mx-auto">
+      <div className="flex items-center gap-3 text-[11px] tracking-[0.18em] uppercase text-slate-400 mb-3"><span className="h-px flex-1 bg-slate-200 dark:bg-slate-800"/>or let your resume do the searching<span className="h-px flex-1 bg-slate-200 dark:bg-slate-800"/></div>
+      <ResumeUploader variant="card" onParsed={onResumeParsed}/>
+     </div>
    </section>
 
    {!profile.filled&&!hideProfilePrompt&&<div className="max-w-3xl mx-auto bg-teal-50 dark:bg-teal-950/50 border border-teal-200 dark:border-teal-900 rounded-2xl px-5 py-4 flex flex-wrap items-center gap-3 anim-fadeUp"><UserCircle size={22} className="text-teal-600 shrink-0"/><div className="text-sm flex-1 min-w-[220px]"><b>Complete your student profile</b><p className="text-slate-500 dark:text-slate-400 text-xs mt-0.5">Add your skills and preferences to see a personal match % on every listing.</p></div><button onClick={()=>setProfileOpen(true)} className="bg-teal-500 hover:bg-teal-600 text-white text-sm font-semibold px-4 py-2 rounded-xl">Build profile</button><button onClick={()=>setHideProfilePrompt(true)} aria-label="Dismiss" className="p-1.5"><X size={16}/></button></div>}
@@ -208,7 +225,7 @@ export default function App(){
    {warnings.map(w=><p key={w} className="text-xs mt-2 text-amber-700 dark:text-amber-300">{w}</p>)}
    {error&&<div className="mt-4 bg-red-50 dark:bg-red-950 border border-red-200 rounded-xl p-4 text-sm">{error}</div>}
    <div className="grid lg:grid-cols-4 gap-5 mt-6">
-    <FilterPanel typeFilter={typeFilter} roleFilter={roleFilter} skillFilter={skillFilter} locFilter={locFilter} modeFilter={modeFilter} deadlineFilter={deadlineFilter} compBand={compBand} sort={sort}
+    <FilterPanel typeFilter={typeFilter} roleFilter={roleFilter} skillFilter={skillFilter} locFilter={locFilter} modeFilter={modeFilter} deadlineFilter={deadlineFilter} compBand={compBand} sort={sort} profileFilled={profile.filled}
       roleOptions={roleOptions} skillOptions={skillOptions} locationOptions={locationOptions} set={setFilter} onClear={clearFilters}/>
     <section className="lg:col-span-3">
      <p className="text-sm text-slate-500 mb-4">Showing <b className="text-slate-900 dark:text-white">{filtered.length}</b> of {results.length} listings</p>
@@ -266,7 +283,9 @@ export default function App(){
     </div>
   </div></div>}
 
-  {profileOpen&&<ProfileModal initial={profile} onClose={()=>setProfileOpen(false)} onSave={p=>{setProfile(p);setProfileOpen(false)}}/>}
+  {profileOpen&&<ProfileModal initial={profile} onClose={()=>setProfileOpen(false)} onSave={p=>{setProfile(p);setProfileOpen(false)}} onImportResume={()=>{setProfileOpen(false);setUploaderOpen(true)}}/>}
+  {uploaderOpen&&<ResumeUploader variant="modal" onClose={()=>setUploaderOpen(false)} onParsed={onResumeParsed}/>}
+  {resumeParsed&&<ResumeReviewModal parsed={resumeParsed} fileName={resumeName} onClose={()=>setResumeParsed(null)} onConfirm={onResumeConfirm}/>}
   {reportTarget&&<ReportModal job={reportTarget} onClose={()=>setReportTarget(null)} onSubmit={submitReport}/>}
 
   <footer className="bg-white dark:bg-slate-900 text-slate-500 mt-4 border-t border-slate-200 dark:border-slate-800"><div className="max-w-7xl mx-auto px-4 py-12 grid md:grid-cols-3 gap-8 text-sm"><div><p className="text-slate-900 dark:text-white font-extrabold text-lg flex items-center gap-2"><span className="w-8 h-8 rounded-lg bg-gradient-to-br from-teal-400 to-cyan-600 grid place-items-center"><Briefcase size={15}/></span>FormSaathi</p><p className="mt-3 text-slate-400 leading-relaxed">Internship & placement discovery across public company websites, with match scores, scam warnings, application tracking and verifiable source links.</p></div><div><p className="text-slate-900 dark:text-white font-semibold mb-3">Explore</p><div className="flex flex-col gap-2 items-start"><button onClick={()=>setView('jobs')}>Browse jobs</button><button onClick={()=>setView('tracker')}>Application tracker</button><button onClick={()=>setView('saved')}>Saved listings</button><button onClick={()=>setView('home')}>Home</button></div></div><div><p className="text-slate-900 dark:text-white font-semibold mb-3">Trust & privacy</p><p className="text-slate-400 leading-relaxed">Listings link to original sources. Profile, tracker and reports live only in your browser (localStorage) — no account, no sync. Never pay to apply.</p></div></div><p className="text-center text-xs text-slate-500 pb-8 px-4">FormSaathi • Internships & Placements • In-memory backend results reset on restart • Never share your API key publicly</p></footer>

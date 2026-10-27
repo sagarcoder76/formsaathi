@@ -19,6 +19,12 @@ The portal covers **two listing types only — Internships and Placement (campus
 - **Numeric compensation** — `parse_compensation()` normalizes stipends and CTC into monthly INR (`compensation_min/max`, `compensation_kind`), powering compensation-band filters; the original wording is always displayed.
 - **Calendar export** — one-click `.ics` download for any listing with a confirmed deadline.
 
+## Resume-driven job discovery
+- **Upload a resume (PDF, DOCX or TXT, up to 5MB)** on the homepage or from the profile modal. Parsing runs entirely in the browser via lazy-loaded `pdfjs-dist` / `mammoth` — the file never leaves the device and only the derived profile (skills, role, degree, batch, cities) is stored in `localStorage`.
+- A **review screen** shows everything detected (deterministic dictionary/regex matching in `frontend/src/lib/resume.ts`) and lets the student correct it before searching — extraction is never treated as perfect.
+- On confirm, the resume builds the TinyFish research query itself (role + top skills + city + internship/placement), prefills the match-scoring profile, and switches results to a **“Best match for you”** sort using the existing weighted match score (skills 70%, location 15%, mode 15%).
+- Scanned/image PDFs with no text layer return a clear message asking for a text-based file instead of failing silently.
+
 ## API
 `GET /api/health` · `GET /api/categories` (`Internship`, `Placement`) · `GET /api/opportunities/demo` · `POST /api/opportunities/research` · `POST /api/opportunities/search` (filter/sort by category, role, skill, location, mode, deadline, `comp_band`) · `GET /api/opportunities/{id}` · `POST /api/opportunities/validate`
 

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { X } from 'lucide-react'
+import { X, UploadCloud } from 'lucide-react'
 import type { StudentProfile } from '../types'
 import { formatSkill } from '../lib/helpers'
 
@@ -12,7 +12,7 @@ const DEGREES=['B.Tech / B.E.','BCA','B.Sc','B.Com','BBA','MBA','MCA','M.Tech','
 const chipCls=(on:boolean)=>`text-xs px-3 py-1.5 rounded-full border transition ${on?'bg-teal-500 border-teal-500 text-white font-semibold':'border-slate-200 dark:border-slate-700 hover:border-teal-400'}`
 const toggle=(list:string[],v:string)=>list.includes(v)?list.filter(x=>x!==v):[...list,v]
 
-export default function ProfileModal({initial,onClose,onSave}:{initial:StudentProfile;onClose:()=>void;onSave:(p:StudentProfile)=>void}){
+export default function ProfileModal({initial,onClose,onSave,onImportResume}:{initial:StudentProfile;onClose:()=>void;onSave:(p:StudentProfile)=>void;onImportResume:()=>void}){
  const [skills,setSkills]=useState(initial.skills)
  const [locations,setLocations]=useState(initial.locations)
  const [modes,setModes]=useState(initial.modes)
@@ -48,7 +48,7 @@ export default function ProfileModal({initial,onClose,onSave}:{initial:StudentPr
        </label>
       </section>
      </div>
-     <div className="flex gap-2 mt-8"><button onClick={save} className="bg-teal-500 hover:bg-teal-600 text-white px-5 py-3 rounded-xl font-semibold">Save profile</button><button onClick={onClose} className="border border-slate-200 dark:border-slate-700 px-5 py-3 rounded-xl">Cancel</button></div>
+     <div className="flex flex-wrap gap-2 mt-8"><button onClick={save} className="bg-teal-500 hover:bg-teal-600 text-white px-5 py-3 rounded-xl font-semibold">Save profile</button><button onClick={onClose} className="border border-slate-200 dark:border-slate-700 px-5 py-3 rounded-xl">Cancel</button><button onClick={onImportResume} className="ml-auto text-sm text-teal-700 dark:text-teal-300 font-semibold flex items-center gap-2 border border-teal-200 dark:border-teal-900 rounded-xl px-4 py-3 hover:bg-teal-50 dark:hover:bg-teal-950"><UploadCloud size={16}/> Auto-fill from resume</button></div>
     </div>
    </div>
   </div>)
