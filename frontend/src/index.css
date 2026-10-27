@@ -36,6 +36,14 @@
   --color-line: #e5eaf1;
 
   --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-display: "Instrument Serif", Georgia, "Times New Roman", serif;
+
+  /* Midnight Studio dark refinement — remap deep slate tokens to navy-tinted
+     surfaces (only used inside dark: variants across the app). */
+  --color-slate-700: #24345f;
+  --color-slate-800: #1e2c52;
+  --color-slate-900: #0f1a38;
+  --color-slate-950: #0a1330;
 
   --animate-fade-up: fadeUp 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
   --animate-floaty: floaty 6s ease-in-out infinite;
@@ -125,6 +133,50 @@ body {
 
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* ================= Photography (Campus Premium+) ================= */
+.photo-frame {
+  position: relative;
+  overflow: hidden;
+  border-radius: 1.5rem;
+  border: 1px solid var(--color-line);
+  background: var(--color-navy-100);
+}
+.dark .photo-frame { border-color: #1e2c52; background: #0f1a38; }
+.photo-frame img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: transform 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.photo-frame:hover img { transform: scale(1.03); }
+/* Brand duotone grade: navy from the left, teal from the right, fading out
+   so faces stay natural; stronger at the edges where text/scrims sit. */
+.photo-grade::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(120deg, rgba(11, 23, 54, 0.28), rgba(0, 191, 166, 0.12) 55%, rgba(11, 23, 54, 0.05));
+  mix-blend-mode: multiply;
+}
+.dark .photo-grade::after {
+  background:
+    linear-gradient(120deg, rgba(6, 13, 34, 0.55), rgba(0, 191, 166, 0.18) 55%, rgba(6, 13, 34, 0.35));
+  mix-blend-mode: normal;
+}
+/* Bottom scrim for legible captions/floating chips over photos. */
+.photo-scrim::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  background: linear-gradient(to top, rgba(6, 13, 34, 0.72) 0%, rgba(6, 13, 34, 0.25) 38%, transparent 62%);
+}
+.font-display { font-family: var(--font-display); font-weight: 400; letter-spacing: -0.01em; }
 
 * { scrollbar-width: thin; scrollbar-color: #c6d0e8 transparent; }
 *::-webkit-scrollbar { width: 8px; height: 8px; }
