@@ -31,6 +31,8 @@ export interface CloudNotification{id:string;title:string;body:string|null;link:
 export interface SavedSearch{id:string;query:string;category:string|null;role:string|null;skill:string|null;location:string|null;mode:string|null;deadline:string|null;comp_band:string|null;created_at:string}
 export interface ResearchResponse{opportunities:Opportunity[];stats:Record<string,number>;cached:boolean;demo_mode:boolean;warnings:string[]}
 
+export type View='home'|'jobs'|'saved'|'tracker'|'companies'
+
 export type Stage='saved'|'applied'|'interview'|'offer'|'rejected'
 export interface TrackerEntry{job:Opportunity;stage:Stage;notes:string;updatedAt:string}
 export interface StudentProfile{skills:string[];batch:string;degree:string;locations:string[];modes:string[];filled:boolean}

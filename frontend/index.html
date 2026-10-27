@@ -5,7 +5,15 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="apple-touch-icon" href="/logo.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="FormSaathi — discover verified internships, fresher jobs and campus placements across India, with match scores, scam warnings and application tracking." />
     <title>FormSaathi — Internship & Placement Portal</title>
+    <script>
+      // Apply the saved theme before first paint to avoid a flash of the wrong theme.
+      try {
+        var saved = JSON.parse(localStorage.getItem('fs-dark') || 'false')
+        if (saved) document.documentElement.classList.add('dark')
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>

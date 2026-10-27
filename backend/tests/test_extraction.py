@@ -144,3 +144,23 @@ def test_extract_opportunity_populates_organizer():
     page={"url":"https://example.com/jobs/1","title":"Data Analyst Internship at Pulse Analytics","text":"Build dashboards with SQL and Python. Apply before 30 December 2026.","links":[]}
     opp=extract_opportunity(page, "Internship", "Internship")
     assert opp is not None and opp.organizer=="Pulse Analytics"
+
+# ---------- Phase 2.1: error / bot-wall pages must never become listings ----------
+from app.extraction import is_error_page
+
+def test_error_page_titles_rejected():
+    page={"url":"https://example.com/job","title":"## Application error: a client-side exception has occurred (see the browser console for more information).",
+          "text":"Web Development Intern. Vexocore It Services. location Gurugram. salary Unpaid."}
+    assert extract_opportunity(page) is None
+
+def test_is_error_page_patterns():
+    assert is_error_page("Just a moment...","Checking your browser before accessing")
+    assert is_error_page("404: Page Not Found","")
+    assert is_error_page("Attention Required! | Cloudflare","")
+    assert not is_error_page("Backend Internship at Numeric Tech","Apply by 30 December 2026")
+
+def test_markdown_header_stripped_from_title():
+    page={"url":"https://example.com/job","title":"### Frontend Developer Intern",
+          "text":"Frontend Developer Internship in Pune. Skills React and TypeScript. Stipend ₹15,000/month."}
+    o=extract_opportunity(page)
+    assert o is not None and o.title=="Frontend Developer Intern"
