@@ -1,4 +1,6 @@
-import type { Opportunity, StudentProfile } from '../types'
+import type { Opportunity, Stage, StudentProfile } from '../types'
+
+export const STAGE_LABEL: Record<Stage, string> = { saved: 'Saved', applied: 'Applied', interview: 'Interview', offer: 'Offer', rejected: 'Rejected' }
 
 export const LS=(k:string,d:unknown)=>{try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch{return d}}
 
@@ -9,7 +11,7 @@ export const verifyLabel=(s:string)=> s==='verified_official'?'Verified official
 export const statusLabel=(s:string)=>({open:'Open',closing_soon:'Closing soon',expired:'Expired',unknown:'Deadline unknown'} as Record<string,string>)[s]||s
 export const statusClass=(s:string)=>({open:'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300',closing_soon:'bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300',expired:'bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300',unknown:'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'} as Record<string,string>)[s]||'bg-slate-100'
 export const deadlineLine=(o:Opportunity)=>o.deadline?`${o.deadline} • ${statusLabel(o.deadline_status)}`:'Deadline unknown — check official page'
-export const typeBadgeCls=(cat:string)=>cat==='Placement'?'bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300':'bg-teal-50 text-teal-700 dark:bg-teal-950 dark:text-teal-300'
+export const typeBadgeCls=(cat:string)=>cat==='Placement'?'bg-navy-50 text-navy-700 dark:bg-navy-950 dark:text-navy-300 border border-navy-100 dark:border-navy-900':'bg-teal-50 text-teal-700 dark:bg-teal-950 dark:text-teal-300 border border-teal-100 dark:border-teal-900'
 export const inr=(n:number)=>'₹'+n.toLocaleString('en-IN')
 
 export const COMP_BANDS=[
@@ -82,3 +84,15 @@ export function downloadIcs(o:Opportunity):boolean{
 
 // Phase 2: stable timestamp helper for event-handler state updates.
 export const nowIso=()=>new Date().toISOString()
+
+// Phase 2.1: error / bot-wall pages must never render as listings (mirrors backend guard).
+const ERROR_TITLE_PATTERNS=[
+  'application error','client-side exception','something went wrong','an error occurred',
+  'internal server error','page not found','404 not found','just a moment','attention required',
+  'unusual traffic','please enable javascript','enable javascript','captcha','access denied',
+  "this site can't be reached",'bad gateway','service unavailable',
+]
+export const isErrorListing=(o:Opportunity):boolean=>{
+  const t=(o.title||'').toLowerCase()
+  return ERROR_TITLE_PATTERNS.some(p=>t.includes(p))
+}

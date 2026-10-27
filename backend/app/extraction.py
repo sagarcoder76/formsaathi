@@ -277,14 +277,30 @@ def classify_link_status(status_code:int|None, error:bool=False)->str:
     if status_code < 400: return "ok"
     return "unknown"  # 401/403 bot protection, 4xx auth, 5xx server trouble — never claim broken
 
+# ---------- Error / bot-wall page detection ----------
+# Fetched URLs can return framework error pages or anti-bot interstitials whose chrome
+# text still mentions an internship — these must never be treated as real listings.
+ERROR_PAGE_PATTERNS=(
+    "application error", "client-side exception", "something went wrong",
+    "an error occurred", "internal server error", "page not found", "404 not found",
+    "just a moment", "attention required", "unusual traffic", "please enable javascript",
+    "enable javascript to continue", "captcha", "access denied", "request rejected",
+    "this site can't be reached", "bad gateway", "service unavailable",
+)
+
+def is_error_page(title:str, text:str)->bool:
+    head=f"{title}\n{text[:400]}".lower()
+    return any(p in head for p in ERROR_PAGE_PATTERNS)
+
 # ---------- Full page -> Opportunity (or None when it is not a job listing) ----------
 def extract_opportunity(page:dict, snippet:str="", requested_category:str|None=None)->Opportunity|None:
     url=page.get("final_url") or page.get("url")
     if not valid_url(url): return None
     text=(page.get("text") or "") if isinstance(page.get("text"),str) else ""
-    title=(page.get("title") or "").strip()
-    if not title and text: title=text.strip().splitlines()[0][:120]
+    title=re.sub(r"^#{1,6}\s+", "", (page.get("title") or "").strip()).strip()
+    if not title and text: title=re.sub(r"^#{1,6}\s+", "", text.strip().splitlines()[0][:120]).strip()
     if not title: return None
+    if is_error_page(title, text): return None
     combined=f"{title}\n{text[:6000]}"
     # Portal scope: keep internships & placements only — everything else is dropped from output.
     category=classify(combined, requested_category)

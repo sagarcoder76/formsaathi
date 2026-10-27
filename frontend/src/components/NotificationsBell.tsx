@@ -34,7 +34,7 @@ export default function NotificationsBell({ uid }: { uid: string }) {
         {unread > 0 && <span className="absolute top-1 right-1 text-[10px] bg-red-500 text-white rounded-full min-w-[16px] h-4 px-1 flex items-center justify-center">{unread > 9 ? '9+' : unread}</span>}
       </button>
       {open && (
-        <div className="absolute right-0 mt-2 w-80 max-w-[90vw] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl z-40 overflow-hidden">
+        <div className="absolute right-0 mt-2 w-80 max-w-[90vw] bg-white dark:bg-slate-900 border border-line dark:border-slate-800 rounded-2xl shadow-xl shadow-navy-900/15 z-40 overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 dark:border-slate-800">
             <p className="font-bold text-sm">Notifications</p>
             {unread > 0 && (
