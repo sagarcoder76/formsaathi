@@ -29,6 +29,15 @@ export interface Opportunity{
 }
 export interface CloudNotification{id:string;title:string;body:string|null;link:string|null;read:boolean;created_at:string}
 export interface SavedSearch{id:string;query:string;category:string|null;role:string|null;skill:string|null;location:string|null;mode:string|null;deadline:string|null;comp_band:string|null;created_at:string}
+export type NotificationKind='deadline'|'matches'|'followup'
+export type NotificationChannel='inapp'|'email'|'push'
+export interface NotificationPreferences{
+  deadline_inapp:boolean; deadline_email:boolean; deadline_push:boolean
+  matches_inapp:boolean; matches_email:boolean; matches_push:boolean
+  followup_inapp:boolean; followup_email:boolean; followup_push:boolean
+  updated_at?:string
+}
+export interface PushSubscriptionRow{id?:string;endpoint:string;p256dh:string;auth:string}
 export interface ResearchResponse{opportunities:Opportunity[];stats:Record<string,number>;cached:boolean;demo_mode:boolean;warnings:string[]}
 
 export type View='home'|'jobs'|'saved'|'tracker'|'companies'

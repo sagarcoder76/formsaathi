@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
-import { Bell, BellOff, CheckCheck } from 'lucide-react'
+import { Bell, BellOff, CheckCheck, Settings2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { listNotifications, markAllNotificationsRead, markNotificationRead } from '../lib/cloud'
+import NotificationPreferencesModal from './NotificationPreferencesModal'
 import type { CloudNotification } from '../types'
 
 export default function NotificationsBell({ uid }: { uid: string }) {
   const [items, setItems] = useState<CloudNotification[]>([])
   const [open, setOpen] = useState(false)
+  const [prefsOpen, setPrefsOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
   const refresh = async () => setItems(await listNotifications())
@@ -37,10 +39,16 @@ export default function NotificationsBell({ uid }: { uid: string }) {
         <div className="absolute right-0 mt-2 w-80 max-w-[90vw] bg-white dark:bg-slate-900 border border-line dark:border-slate-800 rounded-2xl shadow-xl shadow-navy-900/15 z-40 overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 dark:border-slate-800">
             <p className="font-bold text-sm">Notifications</p>
-            {unread > 0 && (
-              <button onClick={() => { markAllNotificationsRead(uid); setItems(p => p.map(n => ({ ...n, read: true }))) }}
-                className="text-xs text-teal-600 font-semibold flex items-center gap-1"><CheckCheck size={13} /> Mark all read</button>
-            )}
+            <div className="flex items-center gap-3">
+              {unread > 0 && (
+                <button onClick={() => { markAllNotificationsRead(uid); setItems(p => p.map(n => ({ ...n, read: true }))) }}
+                  className="text-xs text-teal-600 font-semibold flex items-center gap-1"><CheckCheck size={13} /> Mark all read</button>
+              )}
+              <button onClick={() => setPrefsOpen(true)} aria-label="Notification preferences"
+                className="text-slate-500 hover:text-teal-600 transition-colors">
+                <Settings2 size={15} />
+              </button>
+            </div>
           </div>
           <div className="max-h-96 overflow-auto">
             {items.length === 0 ? (
@@ -56,6 +64,7 @@ export default function NotificationsBell({ uid }: { uid: string }) {
           </div>
         </div>
       )}
+      <NotificationPreferencesModal uid={uid} open={prefsOpen} onClose={() => setPrefsOpen(false)} />
     </div>
   )
 }
