@@ -1,7 +1,7 @@
 // Best-effort Supabase cloud sync. Every function swallows its own errors:
 // localStorage remains the source of truth when logged out or offline.
 import { supabase } from './supabase'
-import type { Opportunity, TrackerEntry, StudentProfile, ReportRecord, CloudNotification, SavedSearch, NotificationPreferences, PushSubscriptionRow } from '../types'
+import type { Opportunity, TrackerEntry, StudentProfile, ReportRecord, CloudNotification, SavedSearch, NotificationPreferences, PushSubscriptionRow, ListingReport } from '../types'
 
 const MIGRATION_FLAG = 'fs-cloud-migrated-v1'
 
@@ -113,7 +113,7 @@ export async function markAllNotificationsRead(uid: string) {
 
 // ---------- notification preferences ----------
 const PREF_COLUMNS =
-  'deadline_inapp,deadline_email,deadline_push,matches_inapp,matches_email,matches_push,followup_inapp,followup_email,followup_push,updated_at'
+  'deadline_inapp,deadline_email,deadline_push,matches_inapp,matches_email,matches_push,followup_inapp,followup_email,followup_push,health_inapp,health_email,health_push,updated_at'
 
 export async function getNotificationPreferences(uid: string): Promise<NotificationPreferences | null> {
   if (!supabase) return null
@@ -140,6 +140,47 @@ export async function savePushSubscription(uid: string, sub: PushSubscriptionRow
 export async function removePushSubscription(uid: string, endpoint: string): Promise<void> {
   if (!supabase) return
   await supabase.from('push_subscriptions').delete().eq('user_id', uid).eq('endpoint', endpoint)
+}
+
+// ---------- admin / moderation (RLS: profiles.is_admin gate, enforced in Postgres) ----------
+export async function getIsAdmin(uid: string): Promise<boolean> {
+  if (!uid || !supabase) return false
+  const { data } = await supabase.from('profiles').select('is_admin').eq('id', uid).maybeSingle()
+  return Boolean(data?.is_admin)
+}
+
+export async function listReports(): Promise<ListingReport[]> {
+  if (!supabase) return []
+  const { data } = await supabase.from('listing_reports').select('*').order('created_at', { ascending: false })
+  return (data as ListingReport[] | null) ?? []
+}
+
+export async function resolveReport(reportId: string, patch: { status: 'open' | 'resolved' }, uid: string): Promise<void> {
+  if (!supabase) throw new Error('Cloud sync is unavailable right now.')
+  const resolved = patch.status === 'resolved'
+  const { error } = await supabase.from('listing_reports').update({
+    status: patch.status,
+    ...(resolved ? { resolved_by: uid, resolved_at: new Date().toISOString() } : { resolved_by: null, resolved_at: null }),
+  }).eq('id', reportId)
+  if (error) throw new Error(error.message)
+}
+
+export async function setOpportunityHidden(opportunityId: string, hidden: boolean): Promise<void> {
+  if (!supabase) throw new Error('Cloud sync is unavailable right now.')
+  const { error } = await supabase.from('opportunities').update({ hidden }).eq('id', opportunityId)
+  if (error) throw new Error(error.message)
+}
+
+export async function listOpportunitiesByIds(ids: string[]): Promise<Opportunity[]> {
+  if (!supabase || ids.length === 0) return []
+  const { data } = await supabase.from('opportunities').select('*').in('id', ids)
+  return (data as Opportunity[] | null) ?? []
+}
+
+export async function listHiddenOpportunities(): Promise<Opportunity[]> {
+  if (!supabase) return []
+  const { data } = await supabase.from('opportunities').select('*').eq('hidden', true).order('last_checked_at', { ascending: false })
+  return (data as Opportunity[] | null) ?? []
 }
 
 // ---------- first-login migration of localStorage data ----------

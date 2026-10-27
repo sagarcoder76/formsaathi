@@ -9,12 +9,14 @@ const DEFAULTS: NotificationPreferences = {
   deadline_inapp: true, deadline_email: false, deadline_push: false,
   matches_inapp: true, matches_email: false, matches_push: false,
   followup_inapp: true, followup_email: false, followup_push: false,
+  health_inapp: true, health_email: false, health_push: false,
 }
 
 const KINDS: { kind: NotificationKind; label: string; hint: string }[] = [
   { kind: 'deadline', label: 'Deadline reminders', hint: 'Saved or tracked listings closing within 48 hours.' },
   { kind: 'matches', label: 'Saved-search matches', hint: 'Daily digest of new opportunities matching your saved searches.' },
   { kind: 'followup', label: 'Application follow-ups', hint: 'Nudge when an “applied” application has not moved for 7 days.' },
+  { kind: 'health', label: 'Listing health', hint: 'When a listing you saved repeatedly fails link checks and is hidden.' },
 ]
 
 const CHANNELS: { channel: NotificationChannel; label: string; icon: typeof Bell }[] = [

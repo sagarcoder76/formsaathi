@@ -18,6 +18,7 @@
   "crons": [
     { "path": "/api/cron/deadline-reminders", "schedule": "0 3 * * *" },
     { "path": "/api/cron/match-digest", "schedule": "15 3 * * *" },
+    { "path": "/api/cron/catalogue-health", "schedule": "0 4 * * *" },
     { "path": "/api/cron/followups", "schedule": "0 5 * * 1" }
   ]
 }

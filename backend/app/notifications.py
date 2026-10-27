@@ -14,12 +14,13 @@ import httpx
 
 from . import emailer, push, supabase_store
 
-KINDS = ("deadline", "matches", "followup")
+KINDS = ("deadline", "matches", "followup", "health")
 CHANNELS = ("inapp", "email", "push")
 DEFAULT_PREFS = {
     "deadline_inapp": True, "deadline_email": False, "deadline_push": False,
     "matches_inapp": True, "matches_email": False, "matches_push": False,
     "followup_inapp": True, "followup_email": False, "followup_push": False,
+    "health_inapp": True, "health_email": False, "health_push": False,
 }
 FOLLOWUP_DAYS = 7
 DEADLINE_WINDOW_DAYS = 2
