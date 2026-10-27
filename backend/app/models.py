@@ -19,6 +19,11 @@ class Opportunity(BaseModel):
     deadline_text: Optional[str] = None
     deadline_status: Literal["open", "expired", "unknown", "closing_soon"] = "unknown"
     compensation: Optional[str] = None  # stipend / salary / CTC, exactly as stated on the page
+    # Numeric compensation normalized to INR per month (CTC/annual is divided by 12). None = not parseable.
+    compensation_min: Optional[int] = None
+    compensation_max: Optional[int] = None
+    compensation_kind: Optional[str] = None  # paid | unpaid | None
+    fraud_flags: List[str] = []  # human-readable scam/payment warnings detected on the source page
     official_url: Optional[str] = None
     application_url: Optional[str] = None
     source_url: str
@@ -46,6 +51,7 @@ class SearchRequest(BaseModel):
     location: Optional[str] = None
     mode: Optional[str] = None
     deadline: Optional[str] = None  # all|upcoming|unknown|expired
+    comp_band: Optional[str] = None  # unpaid|0-10000|10000-25000|25000-plus (monthly INR)
     sort: str = "relevance"
     opportunities: List[Opportunity] = []  # client passes current results to filter locally on server
 

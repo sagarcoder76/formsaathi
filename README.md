@@ -9,8 +9,18 @@ The portal covers **two listing types only — Internships and Placement (campus
 ## What changed for the portal
 - **Scope filter**: extraction classifies each page as `Internship`, `Placement`, or drops it. Only the two portal categories exist end-to-end.
 - **Structured job data**: every listing carries `role` (e.g. Frontend Developer, Data Analyst), `skills[]`, city-level `location`, work `mode` (Remote/Hybrid/In-person), and `compensation` (stipend/salary/CTC, verbatim from the page — `null` when not stated).
-- **Role / skill / location filters**: filter sidebar on the Browse Jobs page, plus job type, work mode, deadline status and sort; the same filters are available on `POST /api/opportunities/search`.
+- **Role / skill / location filters**: filter sidebar on the Browse Jobs page, plus job type, work mode, compensation band, deadline status and sort; the same filters are available on `POST /api/opportunities/search`.
 - **Professional UI**: clear homepage with keyword + location search, latest-openings section, filter-sidebar job listing, and a structured job-details view with prominent **Apply on Official Site** actions.
+
+## Phase 1 features (student workflow)
+- **Application tracker** — move listings through Saved → Applied → Interview → Offer → Rejected with per-application notes; a Kanban tracker view, stored in `localStorage` (old `fs-saved` bookmarks are migrated automatically).
+- **Student profile & match score** — save skills, preferred cities, work mode, batch and degree on the device; every card shows an explainable 0–100% match (skill overlap 70%, location 15%, mode 15%).
+- **Fraud & scam protection** — backend rules flag registration fees, deposits, pay-to-join asks and suspicious UPI payments (negated phrases like "no registration fee" are ignored); warnings render on cards and details, plus a permanent safety note and a **Report listing** flow.
+- **Numeric compensation** — `parse_compensation()` normalizes stipends and CTC into monthly INR (`compensation_min/max`, `compensation_kind`), powering compensation-band filters; the original wording is always displayed.
+- **Calendar export** — one-click `.ics` download for any listing with a confirmed deadline.
+
+## API
+`GET /api/health` · `GET /api/categories` (`Internship`, `Placement`) · `GET /api/opportunities/demo` · `POST /api/opportunities/research` · `POST /api/opportunities/search` (filter/sort by category, role, skill, location, mode, deadline, `comp_band`) · `GET /api/opportunities/{id}` · `POST /api/opportunities/validate`
 
 ## TinyFish docs verified (16 Oct 2026)
 - Search: `GET https://api.search.tinyfish.ai?query=&location=IN&language=en`
@@ -41,10 +51,7 @@ Open **http://localhost:5173**
 ### Test a real search
 1. In the homepage search box type `React developer internship in Bengaluru` (optionally add a location).
 2. Click **Search Jobs** → stats show candidates / fetched / valid listings / duplicates removed.
-3. Use the sidebar to filter by **role, skill, location, mode or deadline**, then click **View Details** → verify deadline status, skills, compensation and source link. Always apply on the official company site yourself.
-
-## API
-`GET /api/health` · `GET /api/categories` (`Internship`, `Placement`) · `GET /api/opportunities/demo` · `POST /api/opportunities/research` · `POST /api/opportunities/search` (filter/sort by category, role, skill, location, mode, deadline) · `GET /api/opportunities/{id}` · `POST /api/opportunities/validate`
+3. Use the sidebar to filter by **role, skill, location, mode, compensation band or deadline**, then click **View Details** → verify match score, scam warnings, deadline, skills, compensation and source link. Always apply on the official company site yourself.
 
 ## How it works & limits
 Search (query is augmented with role/skills/location/type + “India”) → Fetch (batch ≤5 by default) → **portal scope check** (non-job pages dropped) → deterministic Python extraction (role detection, skill dictionary, city detection, deadline regex, eligibility lines, stipend/salary/CTC, apply links — missing = `null`/`unknown`, never invented) → dedupe by exact normalized title+organizer (official source preferred) → deadline status (`open` only with a future known deadline, `closing_soon` ≤14d, `expired`, else `unknown`) → cards with source links.
@@ -55,8 +62,9 @@ Search (query is augmented with role/skills/location/type + “India”) → Fet
 
 ## Tests
 ```bash
-cd backend && python -m pytest tests/ -q   # 12 tests: dates, no-fabrication, expiry, SSRF guard, dedupe,
-                                           # portal classification, non-job drop, role/skill/location extraction, filters
+cd backend && python -m pytest tests/ -q   # 16 tests: dates, no-fabrication, expiry, SSRF guard, dedupe,
+                                           # portal classification, non-job drop, role/skill/location extraction,
+                                           # compensation parser + bands, fraud rules, filters
 cd ../frontend && npm run build            # type-check + production build
 npm run lint                               # oxlint — 0 warnings
 ```

@@ -165,6 +165,64 @@ def extract_compensation(text:str)->str|None:
     if not m: return None
     return re.sub(r"\s+"," ",m.group(0)).strip()[:120]
 
+_NUM=r"(\d+(?:\.\d+)?)"
+_LPA_RE=re.compile(_NUM+r"\s*(?:lpa|lakh\w*|lac\w*)", re.I)
+_MONEY_RE=re.compile(r"(?:₹|rs\.?|inr)\s*(\d[\d,]*(?:\.\d+)?)\s*(k|l|lac|lakh)?", re.I)
+_ANNUAL_HINTS=("lpa","annual","annum","p.a","pa ","year","yearly","ctc","package")
+
+def _to_inr(num:str, suffix:str|None)->float:
+    value=float(num.replace(",",""))
+    if suffix and suffix.lower() in ("k",): value*=1_000
+    if suffix and suffix.lower() in ("l","lac","lakh"): value*=100_000
+    return value
+
+def parse_compensation(text:str):
+    """Return (kind, min_monthly_inr, max_monthly_inr). Never guesses: None when nothing parseable."""
+    if not text: return None, None, None
+    low=text.lower()
+    if re.search(r"\bunpaid\b", low) or "no stipend" in low or "without stipend" in low:
+        return "unpaid", 0, 0
+    amounts=[]  # (amount_inr, is_annual)
+    lpa_spans=[m.span() for m in _LPA_RE.finditer(text)]
+    for m in _LPA_RE.finditer(text):
+        amounts.append((float(m.group(1))*100_000, True))
+    window=text  # parse the whole compensation sentence passed in
+    for m in _MONEY_RE.finditer(window):
+        if any(not (m.end() <= ls or m.start() >= le) for ls, le in lpa_spans): continue  # counted by the LPA rule
+        amount=_to_inr(m.group(1), m.group(2))
+        tail=window[m.end():m.end()+12].lower()
+        head=window[max(0,m.start()-25):m.start()].lower()
+        is_annual=any(h in head or h in tail for h in _ANNUAL_HINTS)
+        amounts.append((amount, is_annual))
+    if not amounts: return None, None, None
+    monthly=[round(a/12) if annual else round(a) for a, annual in amounts]
+    monthly=sorted(set(monthly))
+    return "paid", monthly[0], (monthly[-1] if len(monthly)>1 else monthly[0])
+
+# ---------- Fraud / scam detection ----------
+FRAUD_RULES=[
+ (re.compile(r"registration\s+fee", re.I), "Mentions a registration fee — legitimate employers rarely charge applicants"),
+ (re.compile(r"(?:security|refundable)\s+deposit", re.I), "Asks for a security/refundable deposit — a common job-scam pattern"),
+ (re.compile(r"(?:training|onboarding|document\s+verification|joining)\s+fee", re.I), "Charges a training/onboarding/verification/joining fee"),
+ (re.compile(r"pay\s+(?:a|the|any)?\s*(?:small|one[- ]time|token)?\s*fee\s+to\s+(?:join|confirm|register|apply|secure)", re.I), "Requests payment before you can apply or join"),
+ (re.compile(r"(?:upi|gpay|google\s*pay|phonepe|paytm)[^.\n]{0,50}(?:pay|send|transfer|deposit)", re.I), "Requests money over a personal UPI/wallet instead of an official portal"),
+ (re.compile(r"earn\s+(?:₹|rs\.?|inr)?\s?\d[\d,]*\s*(?:per\s+day|daily)[^.\n]{0,30}(?:work from home|data entry)", re.I), "High daily-income 'work from home' pitch — verify the company carefully"),
+]
+_NEGATION_RE=re.compile(r"(?:\bno\b|\bwithout\b|free of charge|not required|not applicable|none)", re.I)
+
+def detect_fraud(text:str)->list[str]:
+    flags=[]
+    for rule, message in FRAUD_RULES:
+        m=rule.search(text)
+        if not m: continue
+        before=text[max(0,m.start()-35):m.start()].lower()
+        after=text[m.end():m.end()+30].lower()
+        # Skip negated mentions such as "no registration fee" or "registration fee not required"
+        if _NEGATION_RE.search(before) or _NEGATION_RE.search(after): continue
+        if message not in flags: flags.append(message)
+        if len(flags)>=3: break
+    return flags
+
 # ---------- Full page -> Opportunity (or None when it is not a job listing) ----------
 def extract_opportunity(page:dict, snippet:str="", requested_category:str|None=None)->Opportunity|None:
     url=page.get("final_url") or page.get("url")
@@ -195,13 +253,17 @@ def extract_opportunity(page:dict, snippet:str="", requested_category:str|None=N
     st=source_type(url)
     oid=hashlib.sha256(f"{title.lower().strip()}|{domain(url)}".encode()).hexdigest()[:16]
     desc=(page.get("description") or snippet or (text.strip()[:280] if text else None))
+    comp_text=extract_compensation(text)
+    comp_kind, comp_min, comp_max = parse_compensation(comp_text or text[:8000])
     return Opportunity(
         id=oid, title=title[:200], category=category, role=detect_role(title, text),
         organizer=None, description=(desc[:500] if desc else None),
         skills=extract_skills(combined), eligibility=elig,
         location=detect_location(combined), mode=mode,
         deadline=iso, deadline_text=raw, deadline_status=deadline_status(iso),
-        compensation=extract_compensation(text),
+        compensation=comp_text, compensation_kind=comp_kind,
+        compensation_min=comp_min, compensation_max=comp_max,
+        fraud_flags=detect_fraud(combined),
         official_url=url if st=="official" else None, application_url=app_url,
         source_url=url, source_type=st, source_domain=domain(url),
         last_checked_at=datetime.now(timezone.utc).isoformat(),
@@ -234,7 +296,7 @@ def sort_opps(items, sort="relevance"):
     if sort=="recent": return sorted(items, key=lambda x:x.last_checked_at, reverse=True)
     return items
 
-def apply_filters(items, category=None, role=None, location=None, mode=None, deadline=None, skill=None):
+def apply_filters(items, category=None, role=None, location=None, mode=None, deadline=None, skill=None, comp_band=None):
     out=items
     if category: out=[o for o in out if o.category.lower()==category.lower()]
     if role: out=[o for o in out if (o.role or "").lower()==role.lower()]
@@ -244,4 +306,18 @@ def apply_filters(items, category=None, role=None, location=None, mode=None, dea
     if deadline=="upcoming": out=[o for o in out if o.deadline_status in ("open","closing_soon")]
     if deadline=="unknown": out=[o for o in out if o.deadline_status=="unknown"]
     if deadline=="expired": out=[o for o in out if o.deadline_status=="expired"]
+    if comp_band:
+        if comp_band=="unpaid":
+            out=[o for o in out if o.compensation_kind=="unpaid"]
+        else:
+            if comp_band.endswith("-plus"):
+                low=int(comp_band[:-5]); high=None
+            else:
+                lo, hi = comp_band.split("-")
+                low=int(lo); high=int(hi)
+            def in_band(o):
+                if o.compensation_kind!="paid" or o.compensation_min is None: return False
+                top=o.compensation_max if o.compensation_max is not None else o.compensation_min
+                return o.compensation_min <= (high or 10**9) and top >= low
+            out=[o for o in out if in_band(o)]
     return out

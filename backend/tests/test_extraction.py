@@ -1,5 +1,5 @@
 import sys; sys.path.insert(0, "..")
-from app.extraction import parse_deadline, deadline_status, dedupe, valid_url, extract_opportunity, classify, extract_skills, detect_role, apply_filters
+from app.extraction import parse_deadline, deadline_status, dedupe, valid_url, extract_opportunity, classify, extract_skills, detect_role, apply_filters, parse_compensation, detect_fraud
 from app.models import Opportunity
 from datetime import date, timedelta
 
@@ -67,6 +67,41 @@ def test_skill_dictionary_only_returns_real_matches():
     assert extract_skills("Must know Python and SQL, plus communication")==["sql","python","communication"]
     assert extract_skills("No technical terms here")==[]
     assert detect_role("Data Analyst Intern","")=="Data Analyst"
+
+def test_parse_compensation():
+    assert parse_compensation("₹25,000/month stipend")==("paid",25000,25000)
+    assert parse_compensation("Stipend range ₹15,000 to ₹25,000 per month")==("paid",15000,25000)
+    # Annual CTC is normalized to INR per month (12,00,000 / 12)
+    assert parse_compensation("CTC ₹12 LPA")==("paid",100000,100000)
+    assert parse_compensation("₹6.5 LPA package")[1]==54167
+    assert parse_compensation("Unpaid — certificate only")==("unpaid",0,0)
+    # Nothing parseable -> None, never invented
+    assert parse_compensation("Compensation discussed during interview")==(None,None,None)
+
+def test_fraud_detection():
+    assert detect_fraud("A one-time registration fee of ₹999 is required to confirm your seat.")
+    assert detect_fraud("Pay a small fee to join the training programme.")
+    # Negated mentions must NOT be flagged
+    assert detect_fraud("No registration fee — applying is completely free.")==[]
+    assert detect_fraud("Registration fee: not applicable")==[]
+
+def test_fraud_flags_attached_to_opportunity():
+    page={"url":"https://example.com/job","title":"Data Entry Intern",
+          "text":"Work from home internship. Earn ₹1500 per day. A refundable security deposit is required before onboarding.",
+          "links":[]}
+    o=extract_opportunity(page)
+    assert o is not None and len(o.fraud_flags)>=1
+
+def test_comp_band_filter():
+    o1=Opportunity(id="1",title="A",category="Internship",role="Data Analyst",skills=["sql"],location="Remote",mode="Remote",source_url="https://a.com",last_checked_at="2026-01-01T00:00:00Z",compensation_kind="paid",compensation_min=8000,compensation_max=8000)
+    o2=Opportunity(id="2",title="B",category="Placement",role="Software Engineer",skills=["java"],location="Pune",mode="In-person",source_url="https://b.com",last_checked_at="2026-01-01T00:00:00Z",compensation_kind="paid",compensation_min=100000,compensation_max=100000)
+    o3=Opportunity(id="3",title="C",category="Internship",role="Marketing",skills=["seo"],location="Mumbai",mode="Remote",source_url="https://c.com",last_checked_at="2026-01-01T00:00:00Z",compensation_kind="unpaid",compensation_min=0,compensation_max=0)
+    assert len(apply_filters([o1,o2,o3],comp_band="unpaid"))==1
+    assert len(apply_filters([o1,o2,o3],comp_band="0-10000"))==1
+    assert len(apply_filters([o1,o2,o3],comp_band="25000-plus"))==1
+    # Unknown compensation never sneaks into a paid band
+    o4=Opportunity(id="4",title="D",category="Internship",role="QA Engineer",skills=[],location="Delhi",mode="Hybrid",source_url="https://d.com",last_checked_at="2026-01-01T00:00:00Z")
+    assert apply_filters([o4],comp_band="0-10000")==[]
 
 def test_role_and_skill_filters():
     o1=Opportunity(id="1",title="A",category="Internship",role="Data Analyst",skills=["sql","excel"],location="Remote",mode="Remote",source_url="https://a.com",last_checked_at="2026-01-01T00:00:00Z")
