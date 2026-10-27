@@ -1,13 +1,18 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Search, Bookmark, BookmarkCheck, ExternalLink, Moon, Sun, Home, Briefcase, MapPin, Clock, ShieldCheck, ShieldAlert, AlertTriangle, Trash2, Filter, ArrowRight, Building2, Banknote, X, CheckCircle2, CalendarPlus, UserCircle, ClipboardList, Flag } from 'lucide-react'
-import type { Opportunity, ResearchResponse, Stage, TrackerEntry, StudentProfile, ReportRecord } from './types'
-import { LS, formatSkill, verifyLabel, statusLabel, statusClass, deadlineLine, typeBadgeCls, inCompBand, COMP_BANDS, matchScore, matchColor, downloadIcs } from './lib/helpers'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Search, Bookmark, BookmarkCheck, ExternalLink, Moon, Sun, Home, Briefcase, MapPin, Clock, ShieldCheck, ShieldAlert, AlertTriangle, Trash2, Filter, ArrowRight, Building2, Banknote, X, CheckCircle2, CalendarPlus, UserCircle, ClipboardList, Flag, LogOut, Bell, BookmarkPlus, RefreshCw, Link2, Loader2 } from 'lucide-react'
+import type { Opportunity, ResearchResponse, Stage, TrackerEntry, StudentProfile, ReportRecord, SavedSearch } from './types'
+import { LS, formatSkill, verifyLabel, statusLabel, statusClass, deadlineLine, typeBadgeCls, inCompBand, COMP_BANDS, matchScore, matchColor, downloadIcs, nowIso } from './lib/helpers'
 import { buildResumeQuery, type ParsedResume } from './lib/resume'
+import { useAuth } from './lib/auth'
+import { migrateLocalToCloud, pullCloudTracker, upsertSaved, deleteSaved, insertReport, listSavedSearches, createSavedSearch, deleteSavedSearch, listNotifications, createNotification } from './lib/cloud'
 import ProfileModal from './components/ProfileModal'
 import TrackerBoard from './components/TrackerBoard'
 import ReportModal from './components/ReportModal'
 import ResumeUploader from './components/ResumeUploader'
 import ResumeReviewModal from './components/ResumeReviewModal'
+import AuthModal from './components/AuthModal'
+import NotificationsBell from './components/NotificationsBell'
+import CompaniesView from './components/CompaniesView'
 import Logo from './components/Logo'
 
 const JOB_TYPES=['Internship','Placement'] as const
@@ -83,8 +88,10 @@ function SearchBar({query,locQuery,setQuery,setLocQuery,onSearch,loading}:{query
  </div>)}
 
 export default function App(){
+ const { enabled:authEnabled, session, userEmail, loading:authLoading, signOut }=useAuth()
+ const uid=session?.user.id??null
  const [dark,setDark]=useState(()=>LS('fs-dark',false))
- const [view,setView]=useState<'home'|'jobs'|'saved'|'tracker'>('home')
+ const [view,setView]=useState<'home'|'jobs'|'saved'|'tracker'|'companies'>('home')
  const [query,setQuery]=useState('Software engineering internships for students in India')
  const [locQuery,setLocQuery]=useState('')
  const [typeFilter,setTypeFilter]=useState(''); const [roleFilter,setRoleFilter]=useState(''); const [skillFilter,setSkillFilter]=useState(''); const [locFilter,setLocFilter]=useState('')
@@ -98,6 +105,10 @@ export default function App(){
  const [uploaderOpen,setUploaderOpen]=useState(false); const [resumeParsed,setResumeParsed]=useState<ParsedResume|null>(null); const [resumeName,setResumeName]=useState('')
  const [recent,setRecent]=useState<string[]>(()=>LS('fs-recent',[]))
  const [loading,setLoading]=useState(false); const [error,setError]=useState(''); const [stats,setStats]=useState<Record<string,number>|null>(null); const [cached,setCached]=useState(false); const [demo,setDemo]=useState(false); const [warnings,setWarnings]=useState<string[]>([]); const [visible,setVisible]=useState(9); const [health,setHealth]=useState<Record<string,unknown>|null>(null)
+ const [authOpen,setAuthOpen]=useState(false); const [savedSearches,setSavedSearches]=useState<SavedSearch[]>([]); const [rechecking,setRechecking]=useState(false)
+ const notifiedLinks=useRef<Set<string>>(new Set())
+ const latest=useRef({tracker,reports,profile})
+ useEffect(()=>{latest.current={tracker,reports,profile}})
 
  useEffect(()=>{document.documentElement.classList.toggle('dark',dark);localStorage.setItem('fs-dark',JSON.stringify(dark))},[dark])
  useEffect(()=>{localStorage.setItem('fs-tracker',JSON.stringify(tracker))},[tracker])
@@ -112,11 +123,41 @@ export default function App(){
    }).catch(()=>setHealth({status:'backend-offline'}))
  },[])
 
- const setStage=(o:Opportunity,stage:Stage)=>setTracker(p=>({...p,[o.id]:{job:o,stage,notes:p[o.id]?.notes??'',updatedAt:new Date().toISOString()}}))
- const removeTracker=(id:string)=>setTracker(p=>{const n={...p};delete n[id];return n})
- const updateNotes=(id:string,notes:string)=>setTracker(p=>({...p,[id]:{...p[id],notes,updatedAt:new Date().toISOString()}}))
+ // On sign-in: one-time localStorage → cloud migration, then merge cloud-only entries back.
+ useEffect(()=>{
+   if(!uid) return
+   let cancelled=false
+   ;(async()=>{
+     await migrateLocalToCloud(latest.current.tracker, latest.current.reports, latest.current.profile)
+     const [cloud, searches, notifs]=await Promise.all([pullCloudTracker(), listSavedSearches(), listNotifications()])
+     if(cancelled) return
+     setTracker(prev=>{ const n={...prev}; cloud.forEach(e=>{ if(!n[e.job.id]) n[e.job.id]=e }); return n })
+     setSavedSearches(searches)
+     notifiedLinks.current=new Set(notifs.map(x=>x.link ?? ''))
+   })()
+   return ()=>{ cancelled=true }
+ },[uid])
+
+ const setStage=(o:Opportunity,stage:Stage)=>{
+   const entry:TrackerEntry={job:o,stage,notes:tracker[o.id]?.notes??'',updatedAt:nowIso()}
+   setTracker(p=>({...p,[o.id]:entry}))
+   if(uid) void upsertSaved(uid,entry)
+ }
+ const removeTracker=(id:string)=>{
+   setTracker(p=>{const n={...p};delete n[id];return n})
+   if(uid) void deleteSaved(uid,id)
+ }
+ const updateNotes=(id:string,notes:string)=>{
+   setTracker(p=>{ const next={...p,[id]:{...p[id],notes,updatedAt:new Date().toISOString()}}; if(uid&&next[id]) void upsertSaved(uid,next[id]); return next })
+ }
  const toggleSave=(o:Opportunity)=>tracker[o.id]?.stage==='saved'?removeTracker(o.id):setStage(o,'saved')
- const submitReport=(reason:string)=>{ if(reportTarget){setReports(p=>({...p,[reportTarget.id]:{reason,at:new Date().toISOString()}}));setReportTarget(null)} }
+ const submitReport=(reason:string)=>{
+   if(reportTarget){
+     setReports(p=>({...p,[reportTarget.id]:{reason,at:new Date().toISOString()}}))
+     if(uid) void insertReport(uid,reportTarget,reason)
+     setReportTarget(null)
+   }
+ }
  const onResumeParsed=(parsed:ParsedResume,fileName:string)=>{setResumeParsed(parsed);setResumeName(fileName);setUploaderOpen(false)}
  const onResumeConfirm=(p:StudentProfile,role:string|null,category:''|'Internship'|'Placement')=>{
    setProfile(p);setResumeParsed(null)
@@ -135,8 +176,49 @@ export default function App(){
      const data:ResearchResponse=await r.json()
      setResults(data.opportunities);setStats(data.stats);setCached(data.cached);setDemo(data.demo_mode);setWarnings(data.warnings||[]);setVisible(9)
      setRecent(p=>[q,...p.filter(x=>x!==q)].slice(0,6))
+     // Saved-search alerts: deterministic token overlap, deduped per source link (in-app only; email alerts are Phase 3).
+     if(uid&&savedSearches.length){
+       const qTokens=q.toLowerCase().split(/[^a-z0-9]+/).filter(t=>t.length>2)
+       for(const ss of savedSearches){
+         const ssTokens=ss.query.toLowerCase().split(/[^a-z0-9]+/).filter(t=>t.length>2)
+         const overlap=ssTokens.filter(t=>qTokens.includes(t)).length/Math.max(1,ssTokens.length)
+         if(overlap<0.6) continue
+         for(const o of data.opportunities){
+           const link=o.application_url||o.official_url||o.source_url
+           if(notifiedLinks.current.has(link)) continue
+           notifiedLinks.current.add(link)
+           void createNotification(uid,{title:`New match: ${o.title}`,body:`Matches your saved search “${ss.query}”.`,link})
+         }
+       }
+     }
    }catch(e){setError(e instanceof Error?e.message:'Search failed. Is the backend running on port 8000?')}
    finally{setLoading(false)}
+ }
+
+ const saveCurrentSearch=async()=>{
+   if(!uid){setAuthOpen(true);return}
+   const id=await createSavedSearch(uid,{query,category:typeFilter||null,role:roleFilter||null,skill:skillFilter||null,location:locQuery||null,mode:modeFilter||null,deadline:deadlineFilter||null,comp_band:compBand||null})
+   if(id) setSavedSearches(await listSavedSearches())
+ }
+ const removeSavedSearch=async(id:string)=>{ if(!uid)return; await deleteSavedSearch(uid,id); setSavedSearches(p=>p.filter(s=>s.id!==id)) }
+ const runSavedSearch=(s:SavedSearch)=>{
+   setQuery(s.query); if(s.location)setLocQuery(s.location)
+   setTypeFilter(s.category??'');setRoleFilter(s.role??'');setSkillFilter(s.skill??'');setModeFilter(s.mode??'');setDeadlineFilter(s.deadline??'');setCompBand(s.comp_band??'')
+   setView('jobs'); void research(s.query,s.location??undefined)
+ }
+
+ const recheckLink=async()=>{
+   if(!selected||rechecking)return
+   setRechecking(true)
+   try{
+     const r=await fetch('/api/opportunities/recheck',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:selected.application_url||selected.official_url||selected.source_url,id:selected.id})})
+     if(!r.ok) throw new Error('recheck failed')
+     const d=await r.json() as {link_health:string;status_code:number|null}
+     setSelected(s=>s?{...s,link_health:d.link_health}:s)
+     setResults(p=>p.map(o=>o.id===selected.id?{...o,link_health:d.link_health}:o))
+     if(d.link_health==='broken'&&uid) void createNotification(uid,{title:`Broken link: ${selected.title}`,body:`The application link returned ${d.status_code??'an error'} on re-check. Verify on the source page.`,link:selected.source_url})
+   }catch{ setSelected(s=>s?{...s,link_health:'unknown'}:s) }
+   finally{setRechecking(false)}
  }
 
  const roleOptions=useMemo(()=>[...new Set(results.map(o=>o.role).filter((r):r is string=>!!r))].sort(),[results])
@@ -175,10 +257,18 @@ export default function App(){
    <nav className="ml-auto flex gap-1 items-center">
      <button onClick={()=>setView('home')} className="px-3 py-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 flex gap-1.5 items-center text-sm"><Home size={16}/>Home</button>
      <button onClick={()=>setView('jobs')} className="px-3 py-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 flex gap-1.5 items-center text-sm"><Briefcase size={16}/>Browse Jobs</button>
+     <button onClick={()=>setView('companies')} className="px-3 py-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 flex gap-1.5 items-center text-sm"><Building2 size={16}/>Companies</button>
      <button onClick={()=>setView('tracker')} className="px-3 py-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 flex gap-1.5 items-center text-sm"><ClipboardList size={16}/>Tracker {activeEntries.length>0&&<span className="text-[10px] bg-teal-500 text-white rounded-full px-1.5 py-0.5">{activeEntries.length}</span>}</button>
      <button onClick={()=>setView('saved')} className="px-3 py-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 flex gap-1.5 items-center text-sm"><Bookmark size={16}/>Saved ({savedEntries.length})</button>
      <button onClick={()=>setProfileOpen(true)} aria-label="Your profile" className={`p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 ${profile.filled?'text-teal-600':''}`}><UserCircle size={19}/></button>
      <button onClick={()=>research()} className="hidden sm:block bg-teal-500 hover:bg-teal-600 text-white text-sm font-semibold px-5 py-2.5 rounded-full transition ml-1">Find Jobs</button>
+     {authEnabled&&(uid?
+       <span className="flex items-center gap-1 ml-1">
+         <NotificationsBell uid={uid}/>
+         <span title={userEmail??''} className="hidden md:inline text-xs font-semibold bg-slate-100 dark:bg-slate-800 rounded-full px-3 py-1.5 max-w-[160px] truncate">{userEmail}</span>
+         <button onClick={()=>void signOut()} aria-label="Sign out" className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"><LogOut size={17}/></button>
+       </span>
+       :<button onClick={()=>setAuthOpen(true)} disabled={authLoading} className="bg-[#0a1f44] hover:bg-[#12306b] text-white text-sm font-semibold px-4 py-2 rounded-full flex items-center gap-1.5 ml-1 disabled:opacity-60"><Bell size={14}/>Sign in</button>)}
      <button onClick={()=>setDark(!dark)} aria-label="Toggle dark mode" className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800">{dark?<Sun size={18}/>:<Moon size={18}/>}</button>
    </nav></div></header>
 
@@ -220,6 +310,13 @@ export default function App(){
 
   {view==='jobs'&&<main className="max-w-7xl mx-auto px-4 py-8">
    <SearchBar query={query} locQuery={locQuery} setQuery={setQuery} setLocQuery={setLocQuery} onSearch={()=>research()} loading={loading}/>
+   <div className="mt-3 flex flex-wrap items-center gap-2">
+    <button onClick={()=>void saveCurrentSearch()} className="text-xs font-semibold border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 rounded-full px-3 py-1.5 flex items-center gap-1.5 hover:border-teal-400 hover:text-teal-600"><BookmarkPlus size={13}/>{uid?'Save this search':'Sign in to save searches'}</button>
+    {savedSearches.map(s=><span key={s.id} className="text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-full pl-3 pr-1.5 py-1 flex items-center gap-1.5">
+      <button onClick={()=>runSavedSearch(s)} className="font-semibold hover:text-teal-600" title={s.query}>{s.query.length>38?s.query.slice(0,38)+'…':s.query}</button>
+      <button onClick={()=>void removeSavedSearch(s.id)} aria-label={`Remove saved search ${s.query}`} className="p-0.5 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800"><X size={12}/></button>
+    </span>)}
+   </div>
    {loading&&<div className="mt-4 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 animate-pulse">Searching → fetching pages → extracting roles & skills → deduplicating…</div>}
    {stats&&!loading&&<div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3 text-center text-sm">{[['Candidate pages',stats.candidates],['Pages inspected',stats.fetched],['Valid listings',stats.extracted],['Duplicates removed',stats.duplicates_removed]].map(([k,v])=><div key={k as string} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-sm"><b className="text-2xl text-teal-600">{v as number}</b><br/><span className="text-xs text-slate-500">{k as string}</span></div>)}</div>}
    {cached&&<p className="text-xs mt-2 text-slate-500">Served from temporary backend cache (up to 10 min) to avoid repeating the same research.</p>}
@@ -237,13 +334,19 @@ export default function App(){
    </div>
   </main>}
 
+  {view==='companies'&&<main className="max-w-7xl mx-auto px-4 py-8">
+   <h1 className="text-2xl font-bold mb-1">Companies</h1>
+   <p className="text-sm text-slate-500 mb-6">Listings from your current results grouped by organizer, with source-verification badges. Organizers are detected from the page text or its domain; unstated sources stay unstated.</p>
+   <CompaniesView opportunities={results} onOpen={setSelected}/>
+  </main>}
+
   {view==='tracker'&&<main className="max-w-7xl mx-auto px-4 py-8">
    <h1 className="text-2xl font-bold mb-1">Application tracker</h1>
-   <p className="text-sm text-slate-500 mb-6">Your private pipeline, stored only in this browser. Move listings across stages and keep notes per application.</p>
+   <p className="text-sm text-slate-500 mb-6">Your private pipeline{uid?', synced to your account across devices':', stored in this browser — sign in to sync across devices'}. Move listings across stages and keep notes per application.</p>
    <TrackerBoard entries={activeEntries} onStage={(id,s)=>{const e=tracker[id];if(e)setStage(e.job,s)}} onNotes={updateNotes} onRemove={removeTracker} onOpen={(id)=>{const e=tracker[id];if(e)setSelected(e.job)}}/>
   </main>}
 
-  {view==='saved'&&<main className="max-w-7xl mx-auto px-4 py-8"><h1 className="text-2xl font-bold mb-2">Your saved listings</h1><p className="text-sm text-slate-500 mb-6">Saved only in this browser (localStorage) — they do not sync across devices and there is no account.</p>{savedEntries.length===0?<div className="text-center py-16 bg-white dark:bg-slate-900 border border-dashed rounded-2xl text-slate-500"><Bookmark size={22} className="mx-auto mb-2 text-slate-300"/>Nothing saved yet. Click “Save” on any listing.</div>:<div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">{savedEntries.map(e=><JobCard key={e.job.id} {...cardProps(e.job)}/>)}</div>}<button onClick={()=>{if(confirm('Clear all saved listings?')){savedEntries.forEach(e=>removeTracker(e.job.id))}}} className="mt-6 text-sm text-red-600 flex gap-1 items-center"><Trash2 size={14}/> Clear saved</button></main>}
+  {view==='saved'&&<main className="max-w-7xl mx-auto px-4 py-8"><h1 className="text-2xl font-bold mb-2">Your saved listings</h1><p className="text-sm text-slate-500 mb-6">{uid?'Synced to your FormSaathi account — the same saves appear on every device you sign in on.':'Saved in this browser (localStorage). Sign in to back them up and sync across devices.'}</p>{savedEntries.length===0?<div className="text-center py-16 bg-white dark:bg-slate-900 border border-dashed rounded-2xl text-slate-500"><Bookmark size={22} className="mx-auto mb-2 text-slate-300"/>Nothing saved yet. Click “Save” on any listing.</div>:<div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">{savedEntries.map(e=><JobCard key={e.job.id} {...cardProps(e.job)}/>)}</div>}<button onClick={()=>{if(confirm('Clear all saved listings?')){savedEntries.forEach(e=>removeTracker(e.job.id))}}} className="mt-6 text-sm text-red-600 flex gap-1 items-center"><Trash2 size={14}/> Clear saved</button></main>}
 
   {selected&&<div className="fixed inset-0 bg-black/50 z-30 flex items-end md:items-center justify-center p-0 md:p-6" onClick={()=>setSelected(null)}><div className="bg-white dark:bg-slate-900 w-full max-w-3xl max-h-[90vh] overflow-auto rounded-t-3xl md:rounded-3xl" onClick={e=>e.stopPropagation()}>
     <div className="p-6 md:p-8">
@@ -272,6 +375,17 @@ export default function App(){
       <div className="flex gap-2"><dt className="font-semibold shrink-0">Last checked:</dt><dd>{new Date(selected.last_checked_at).toLocaleString()}</dd></div>
       <div className="flex gap-2"><dt className="font-semibold shrink-0">Source:</dt><dd><a className="text-teal-600 underline break-all" href={selected.source_url} target="_blank" rel="noreferrer">{selected.source_url}</a></dd></div>
       {selected.also_found_on?.length>0&&<div className="flex gap-2"><dt className="font-semibold shrink-0">Also found on:</dt><dd className="break-all">{selected.also_found_on.join(', ')}</dd></div>}
+      <div className="flex gap-2 items-center flex-wrap">
+        <dt className="font-semibold shrink-0 flex items-center gap-1"><Link2 size={14}/>Link health:</dt>
+        <dd className="flex items-center gap-2 flex-wrap">
+          <span className={`text-[11px] font-semibold rounded-full px-2.5 py-1 border ${selected.link_health==='ok'?'text-teal-700 bg-teal-50 border-teal-200 dark:bg-teal-950/60 dark:text-teal-300 dark:border-teal-900':selected.link_health==='broken'?'text-red-700 bg-red-50 border-red-200 dark:bg-red-950/60 dark:text-red-300 dark:border-red-900':'text-slate-500 bg-slate-100 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700'}`}>
+            {selected.link_health==='ok'?'Working — re-checked now':selected.link_health==='broken'?'Broken — apply link failed':'Not re-checked'}
+          </span>
+          <button onClick={()=>void recheckLink()} disabled={rechecking} className="text-xs font-semibold border border-slate-200 dark:border-slate-700 rounded-full px-3 py-1.5 flex items-center gap-1.5 hover:border-teal-400 hover:text-teal-600 disabled:opacity-60">
+            {rechecking?<Loader2 size={12} className="animate-spin"/>:<RefreshCw size={12}/>} Re-check link
+          </button>
+        </dd>
+      </div>
     </dl>
     <div className="mt-5 bg-amber-50 dark:bg-amber-950 rounded-xl p-3 text-xs flex gap-2"><ShieldCheck size={15} className="shrink-0 mt-0.5 text-amber-600"/><span>Never pay a registration fee, deposit or training charge to get a job or internship — legitimate employers do not ask for money. Always review official requirements and submit the application yourself.</span></div>
     <div className="flex flex-wrap gap-2 mt-5">
@@ -288,7 +402,8 @@ export default function App(){
   {uploaderOpen&&<ResumeUploader variant="modal" onClose={()=>setUploaderOpen(false)} onParsed={onResumeParsed}/>}
   {resumeParsed&&<ResumeReviewModal parsed={resumeParsed} fileName={resumeName} onClose={()=>setResumeParsed(null)} onConfirm={onResumeConfirm}/>}
   {reportTarget&&<ReportModal job={reportTarget} onClose={()=>setReportTarget(null)} onSubmit={submitReport}/>}
+  {authOpen&&<AuthModal onClose={()=>setAuthOpen(false)}/>}
 
-  <footer className="bg-white dark:bg-slate-900 text-slate-500 mt-4 border-t border-slate-200 dark:border-slate-800"><div className="max-w-7xl mx-auto px-4 py-12 grid md:grid-cols-3 gap-8 text-sm"><div><p className="text-slate-900 dark:text-white font-extrabold text-lg flex items-center gap-2"><Logo size={32}/>FormSaathi</p><p className="mt-3 text-slate-400 leading-relaxed">Internship & placement discovery across public company websites, with match scores, scam warnings, application tracking and verifiable source links.</p></div><div><p className="text-slate-900 dark:text-white font-semibold mb-3">Explore</p><div className="flex flex-col gap-2 items-start"><button onClick={()=>setView('jobs')}>Browse jobs</button><button onClick={()=>setView('tracker')}>Application tracker</button><button onClick={()=>setView('saved')}>Saved listings</button><button onClick={()=>setView('home')}>Home</button></div></div><div><p className="text-slate-900 dark:text-white font-semibold mb-3">Trust & privacy</p><p className="text-slate-400 leading-relaxed">Listings link to original sources. Profile, tracker and reports live only in your browser (localStorage) — no account, no sync. Never pay to apply.</p></div></div><p className="text-center text-xs text-slate-500 pb-8 px-4">FormSaathi • Internships & Placements • In-memory backend results reset on restart • Never share your API key publicly</p></footer>
+  <footer className="bg-white dark:bg-slate-900 text-slate-500 mt-4 border-t border-slate-200 dark:border-slate-800"><div className="max-w-7xl mx-auto px-4 py-12 grid md:grid-cols-3 gap-8 text-sm"><div><p className="text-slate-900 dark:text-white font-extrabold text-lg flex items-center gap-2"><Logo size={32}/>FormSaathi</p><p className="mt-3 text-slate-400 leading-relaxed">Internship & placement discovery across public company websites, with match scores, scam warnings, application tracking and verifiable source links.</p></div><div><p className="text-slate-900 dark:text-white font-semibold mb-3">Explore</p><div className="flex flex-col gap-2 items-start"><button onClick={()=>setView('jobs')}>Browse jobs</button><button onClick={()=>setView('tracker')}>Application tracker</button><button onClick={()=>setView('saved')}>Saved listings</button><button onClick={()=>setView('home')}>Home</button></div></div><div><p className="text-slate-900 dark:text-white font-semibold mb-3">Trust & privacy</p><p className="text-slate-400 leading-relaxed">Listings link to original sources. Your data stays in this browser unless you sign in — then it is privately synced to your account. Never pay to apply.</p></div></div><p className="text-center text-xs text-slate-500 pb-8 px-4">FormSaathi • Internships & Placements • Researched listings persist to the cloud catalogue when Supabase is configured • Never share your API key publicly</p></footer>
  </div>
 }

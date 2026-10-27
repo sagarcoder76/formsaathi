@@ -48,7 +48,8 @@ def test_internship_extraction_has_role_skills_and_no_invention():
     assert o.application_url=="https://example.com/apply/frontend"
     # Missing deadline must stay unknown — never invented
     assert o.deadline is None and o.deadline_status=="unknown"
-    assert o.organizer is None
+    # Phase 2: organizer now derived from the source domain (no prose company name here)
+    assert o.organizer=="Example"
 
 def test_placement_extraction():
     page={"url":"https://example.com/job","title":"Graduate Engineer Trainee",
@@ -110,3 +111,36 @@ def test_role_and_skill_filters():
     assert len(apply_filters([o1,o2],role="Data Analyst"))==1
     assert len(apply_filters([o1,o2],skill="SQL"))==1
     assert len(apply_filters([o1,o2],location="pune"))==1
+
+# ---------- Phase 2: organizer detection + link health ----------
+from app.extraction import detect_organizer, classify_link_status
+
+def test_organizer_from_text_pattern():
+    page={"title":"Backend Internship at Numeric Tech","text":"Join our backend team. Apply now."}
+    org=detect_organizer(page, "https://careers.example.com/intern/1")
+    assert org=="Numeric Tech"
+
+def test_organizer_domain_fallback():
+    page={"title":"Summer Internship 2026","text":"No company mentioned anywhere in this text."}
+    org=detect_organizer(page, "https://zomato-careers.example.org/job/42")
+    assert org is not None and len(org) >= 3
+
+def test_organizer_co_in_domain():
+    page={"title":"SDE Placement","text":"Generic text without an employer name."}
+    org=detect_organizer(page, "https://jobs.acme.co.in/openings/9")
+    assert org=="Acme"
+
+def test_link_health_classification():
+    assert classify_link_status(200)=="ok"
+    assert classify_link_status(301)=="ok"
+    assert classify_link_status(404)=="broken"
+    assert classify_link_status(410)=="broken"
+    # Bot protection / server errors must not be reported as broken
+    assert classify_link_status(403)=="unknown"
+    assert classify_link_status(500)=="unknown"
+    assert classify_link_status(None, error=True)=="unknown"
+
+def test_extract_opportunity_populates_organizer():
+    page={"url":"https://example.com/jobs/1","title":"Data Analyst Internship at Pulse Analytics","text":"Build dashboards with SQL and Python. Apply before 30 December 2026.","links":[]}
+    opp=extract_opportunity(page, "Internship", "Internship")
+    assert opp is not None and opp.organizer=="Pulse Analytics"

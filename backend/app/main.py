@@ -1,13 +1,15 @@
 import os, time
+from datetime import datetime, timezone
 from collections import defaultdict
+import httpx
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
 load_dotenv()
 from .models import ResearchRequest, SearchRequest, ResearchResponse
-from . import tinyfish
-from .extraction import extract_opportunity, dedupe, apply_filters, sort_opps, valid_url
+from . import tinyfish, supabase_store
+from .extraction import extract_opportunity, dedupe, apply_filters, sort_opps, valid_url, classify_link_status
 from .demo_data import DEMO
 
 app=FastAPI(title="FormSaathi Internship & Placement API", version="2.0.0")
@@ -32,7 +34,7 @@ async def rate_limit(request:Request, call_next):
     return await call_next(request)
 
 @app.get("/api/health")
-def health(): return {"status":"ok","tinyfish_configured":tinyfish.has_key(),"demo_mode":not tinyfish.has_key(),"storage":"in-memory (resets on restart) + browser localStorage","portal":"internships & placements"}
+def health(): return {"status":"ok","tinyfish_configured":tinyfish.has_key(),"demo_mode":not tinyfish.has_key(),"supabase_configured":supabase_store.configured(),"storage":"in-memory + Supabase cloud sync + browser localStorage","portal":"internships & placements"}
 
 @app.get("/api/categories")
 def categories(): return {"categories":CATEGORIES}
@@ -55,6 +57,32 @@ def get_one(opportunity_id:str):
 def validate(payload:dict):
     url=payload.get("url","")
     return {"url":url,"valid":valid_url(url)}
+
+@app.post("/api/opportunities/recheck")
+async def recheck(payload:dict):
+    """Probe an apply/source link and classify it ok | broken | unknown (SSRF-guarded)."""
+    url=payload.get("url","")
+    opp_id=(payload.get("id") or "").strip()
+    if not valid_url(url):
+        raise HTTPException(status_code=400, detail="Invalid or disallowed URL.")
+    headers={"User-Agent":"Mozilla/5.0 (compatible; FormSaathiBot/1.0; +https://formsaathi-ten.vercel.app)"}
+    status_code=None; error=False
+    try:
+        async with httpx.AsyncClient(timeout=15, follow_redirects=True) as c:
+            try:
+                r=await c.head(url, headers=headers)
+                status_code=r.status_code
+                if status_code in (403,405,401):  # many sites reject HEAD — retry with GET
+                    r=await c.get(url, headers=headers)
+                    status_code=r.status_code
+            except httpx.HTTPError:
+                error=True
+    except Exception:
+        error=True
+    health=classify_link_status(status_code, error)
+    if opp_id:
+        await supabase_store.update_link_health(opp_id, health)
+    return {"url":url,"status_code":status_code,"link_health":health,"checked_at":datetime.now(timezone.utc).isoformat()}
 
 @app.post("/api/opportunities/research", response_model=ResearchResponse)
 async def research(req:ResearchRequest):
@@ -101,6 +129,8 @@ async def research(req:ResearchRequest):
     opps, removed = dedupe(opps)
     opps=sort_opps(opps,"deadline")
     for o in opps: STORE[o.id]=o
-    stats={"candidates":len(candidates),"fetched":fetched,"extracted":len(opps),"duplicates_removed":removed}
+    # Best-effort cloud persistence — never blocks or fails the research response.
+    persisted=await supabase_store.upsert_opportunities(opps)
+    stats={"candidates":len(candidates),"fetched":fetched,"extracted":len(opps),"duplicates_removed":removed,"persisted":persisted}
     CACHE[cache_key]=(now,opps,stats)
     return ResearchResponse(opportunities=opps, stats=stats, cached=False, warnings=warnings)
