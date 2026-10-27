@@ -32,6 +32,7 @@ class Opportunity(BaseModel):
     last_checked_at: str
     verification_status: Literal["verified_official", "secondary_source", "needs_review", "demo"] = "needs_review"
     also_found_on: List[str] = []
+    link_health: Literal["unknown", "ok", "broken"] = "unknown"  # Phase 2 link re-checks
 
 class ResearchRequest(BaseModel):
     query: str = Field(min_length=3, max_length=300)

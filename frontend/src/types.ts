@@ -25,7 +25,10 @@ export interface Opportunity{
   last_checked_at:string
   verification_status:string
   also_found_on:string[]
+  link_health?:string          // unknown | ok | broken (Phase 2 link re-checks)
 }
+export interface CloudNotification{id:string;title:string;body:string|null;link:string|null;read:boolean;created_at:string}
+export interface SavedSearch{id:string;query:string;category:string|null;role:string|null;skill:string|null;location:string|null;mode:string|null;deadline:string|null;comp_band:string|null;created_at:string}
 export interface ResearchResponse{opportunities:Opportunity[];stats:Record<string,number>;cached:boolean;demo_mode:boolean;warnings:string[]}
 
 export type Stage='saved'|'applied'|'interview'|'offer'|'rejected'

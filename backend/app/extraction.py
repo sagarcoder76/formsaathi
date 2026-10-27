@@ -1,15 +1,27 @@
-import re, hashlib
+import re, hashlib, ipaddress
 from datetime import date, datetime, timezone
 from urllib.parse import urlparse
 from .models import Opportunity
 
 # ---------- URL safety ----------
 BLOCKED_HOSTS={"localhost","127.0.0.1","0.0.0.0"}
+def _is_blocked_ip(host:str)->bool:
+    """True for loopback/private/link-local/reserved IP literals (e.g. cloud metadata 169.254.169.254)."""
+    try:
+        ip=ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    return ip.is_loopback or ip.is_private or ip.is_link_local or ip.is_reserved or ip.is_multicast or ip.is_unspecified
+
 def valid_url(u:str|None)->bool:
     if not u: return False
     try:
         p=urlparse(u)
-        return p.scheme in ("http","https") and bool(p.netloc) and p.hostname not in BLOCKED_HOSTS and not (p.hostname or "").endswith(".local")
+        host=p.hostname or ""
+        if p.scheme not in ("http","https") or not p.netloc: return False
+        if host in BLOCKED_HOSTS or host.endswith(".local"): return False
+        if _is_blocked_ip(host): return False
+        return True
     except Exception: return False
 
 def domain(u:str)->str:
@@ -223,6 +235,48 @@ def detect_fraud(text:str)->list[str]:
         if len(flags)>=3: break
     return flags
 
+# ---------- Organizer / company detection ----------
+_GENERIC_TLDS={"com","org","net","io","co","gov","nic","ac","edu","in","ai","app","dev","careers"}
+# Keywords use inline [Xx] case classes (not re.I) so the capture stays uppercase-first —
+# prose like "hiring at our office" can never be mistaken for a company name.
+_ORG_PATTERNS=[
+ re.compile(r"\b(?:[Hh]iring|[Cc]areers?|[Jj]obs?)\s+(?:at|by|with)\s+([A-Z][A-Za-z0-9&.,'’\- ]{2,40}?)(?:[.|,|]|\s+[Ii]s\s|\s+[Aa]re\s|\s+[Ii]n\s|\n|$)"),
+ re.compile(r"\b([A-Z][A-Za-z0-9&.,'’\- ]{2,40}?)\s+[Ii]s\s+[Hh]iring\b"),
+ re.compile(r"\b(?:company|organization|organisation|employer|posted by|hosted by)\s*[:\-]\s*([A-Za-z0-9&.,'’\- ]{2,40})", re.I),
+ re.compile(r"\b(?:[Ii]nternship|[Jj]ob|[Rr]ole|[Pp]osition)\s+(?:at|with|by)\s+([A-Z][A-Za-z0-9&.,'’\- ]{2,40}?)(?:[.|,|]|\s+[Ii]n\s|\n|$)"),
+]
+
+def organizer_from_domain(url:str)->str|None:
+    d=domain(url)
+    if not d: return None
+    parts=d.split(".")
+    if len(parts)>=3 and parts[-2] in {"co","com","org","gov","nic","ac"}:
+        label=parts[-3]
+    else:
+        label=parts[-2] if len(parts)>=2 else parts[0]
+    label=label.replace("-"," ").replace("_"," ")
+    return " ".join(w.capitalize() for w in label.split()) or None
+
+def detect_organizer(page:dict, url:str)->str|None:
+    title=page.get("title") or ""
+    text=page.get("text") or ""
+    haystack=f"{title}\n{text[:3000]}"
+    for pat in _ORG_PATTERNS:
+        m=pat.search(haystack)
+        if m:
+            cand=re.sub(r"\s+"," ",m.group(1)).strip(" .,-|'’")
+            if 2<=len(cand)<=40 and cand.lower() not in {"india","the team","our team"}:
+                return cand
+    return organizer_from_domain(url)
+
+# ---------- Link health ----------
+def classify_link_status(status_code:int|None, error:bool=False)->str:
+    """Map an HTTP probe to ok | broken | unknown. Bot-blocks/5xx are 'unknown', not dead links."""
+    if error or status_code is None: return "unknown"
+    if status_code in (404, 410): return "broken"
+    if status_code < 400: return "ok"
+    return "unknown"  # 401/403 bot protection, 4xx auth, 5xx server trouble — never claim broken
+
 # ---------- Full page -> Opportunity (or None when it is not a job listing) ----------
 def extract_opportunity(page:dict, snippet:str="", requested_category:str|None=None)->Opportunity|None:
     url=page.get("final_url") or page.get("url")
@@ -257,7 +311,7 @@ def extract_opportunity(page:dict, snippet:str="", requested_category:str|None=N
     comp_kind, comp_min, comp_max = parse_compensation(comp_text or text[:8000])
     return Opportunity(
         id=oid, title=title[:200], category=category, role=detect_role(title, text),
-        organizer=None, description=(desc[:500] if desc else None),
+        organizer=detect_organizer(page, url), description=(desc[:500] if desc else None),
         skills=extract_skills(combined), eligibility=elig,
         location=detect_location(combined), mode=mode,
         deadline=iso, deadline_text=raw, deadline_status=deadline_status(iso),

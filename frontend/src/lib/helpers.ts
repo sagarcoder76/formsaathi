@@ -79,3 +79,6 @@ export function downloadIcs(o:Opportunity):boolean{
   const a=document.createElement('a');a.href=url;a.download=`formsaathi-deadline-${o.id}.ics`;document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url)
   return true
 }
+
+// Phase 2: stable timestamp helper for event-handler state updates.
+export const nowIso=()=>new Date().toISOString()
