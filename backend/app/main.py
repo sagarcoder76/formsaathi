@@ -43,7 +43,7 @@ def demo(): return {"opportunities":DEMO,"demo_mode":True}
 @app.post("/api/opportunities/search")
 def search_local(req:SearchRequest):
     items=req.opportunities or list(STORE.values())
-    out=sort_opps(apply_filters(items,req.category,req.role,req.location,req.mode,req.deadline,req.skill),req.sort)
+    out=sort_opps(apply_filters(items,req.category,req.role,req.location,req.mode,req.deadline,req.skill,req.comp_band),req.sort)
     return {"opportunities":out,"total":len(out)}
 
 @app.get("/api/opportunities/{opportunity_id}")
