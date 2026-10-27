@@ -14,5 +14,10 @@
   "rewrites": [
     { "source": "/api/(.*)", "destination": { "service": "backend" } },
     { "source": "/(.*)", "destination": { "service": "frontend" } }
+  ],
+  "crons": [
+    { "path": "/api/cron/deadline-reminders", "schedule": "0 3 * * *" },
+    { "path": "/api/cron/match-digest", "schedule": "15 3 * * *" },
+    { "path": "/api/cron/followups", "schedule": "0 5 * * 1" }
   ]
 }

@@ -1,7 +1,7 @@
 // Best-effort Supabase cloud sync. Every function swallows its own errors:
 // localStorage remains the source of truth when logged out or offline.
 import { supabase } from './supabase'
-import type { Opportunity, TrackerEntry, StudentProfile, ReportRecord, CloudNotification, SavedSearch } from '../types'
+import type { Opportunity, TrackerEntry, StudentProfile, ReportRecord, CloudNotification, SavedSearch, NotificationPreferences, PushSubscriptionRow } from '../types'
 
 const MIGRATION_FLAG = 'fs-cloud-migrated-v1'
 
@@ -109,6 +109,37 @@ export async function markAllNotificationsRead(uid: string) {
   if (!supabase) return
   const { error } = await supabase.from('notifications').update({ read: true }).eq('user_id', uid).eq('read', false)
   if (error) console.warn('notification update failed', error.message)
+}
+
+// ---------- notification preferences ----------
+const PREF_COLUMNS =
+  'deadline_inapp,deadline_email,deadline_push,matches_inapp,matches_email,matches_push,followup_inapp,followup_email,followup_push,updated_at'
+
+export async function getNotificationPreferences(uid: string): Promise<NotificationPreferences | null> {
+  if (!supabase) return null
+  const { data } = await supabase.from('notification_preferences').select(PREF_COLUMNS).eq('user_id', uid).maybeSingle()
+  return (data as NotificationPreferences | null) ?? null
+}
+
+export async function upsertNotificationPreferences(uid: string, prefs: NotificationPreferences): Promise<void> {
+  if (!supabase) throw new Error('Cloud sync is unavailable right now.')
+  const row = { user_id: uid, ...prefs }
+  delete (row as Partial<NotificationPreferences>).updated_at
+  const { error } = await supabase.from('notification_preferences').upsert(row)
+  if (error) throw new Error(error.message)
+}
+
+export async function savePushSubscription(uid: string, sub: PushSubscriptionRow): Promise<void> {
+  if (!supabase) throw new Error('Cloud sync is unavailable right now.')
+  // One row per endpoint: clear any stale copy first so RLS/unique conflicts never surface.
+  await supabase.from('push_subscriptions').delete().eq('user_id', uid).eq('endpoint', sub.endpoint)
+  const { error } = await supabase.from('push_subscriptions').insert({ user_id: uid, ...sub })
+  if (error) throw new Error(error.message)
+}
+
+export async function removePushSubscription(uid: string, endpoint: string): Promise<void> {
+  if (!supabase) return
+  await supabase.from('push_subscriptions').delete().eq('user_id', uid).eq('endpoint', endpoint)
 }
 
 // ---------- first-login migration of localStorage data ----------

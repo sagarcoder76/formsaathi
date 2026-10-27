@@ -28,6 +28,16 @@ The portal covers **two listing types only — Internships and Placement (campus
 ## API
 `GET /api/health` · `GET /api/categories` (`Internship`, `Placement`) · `GET /api/opportunities/demo` · `POST /api/opportunities/research` · `POST /api/opportunities/search` (filter/sort by category, role, skill, location, mode, deadline, `comp_band`) · `GET /api/opportunities/{id}` · `POST /api/opportunities/validate`
 
+## Notification suite (Phase 3)
+Three alert kinds, each deliverable over three channels, with per-user toggles (defaults: in-app **on**, email/push **off**):
+- **Deadline reminders** — saved/tracked listings closing within 48 hours (rejected listings excluded).
+- **Saved-search match digest** — one daily digest per saved search, using the same token-overlap (≥0.6) and location rules as the app.
+- **Application follow-ups** — nudge when an `applied` row has not moved for 7 days.
+
+Channels: in-app (Supabase `notifications`, real-time bell), email (Resend — dormant until `RESEND_API_KEY` is set) and browser Web Push (VAPID; Safari/unsupported browsers degrade gracefully). A `notification_events` ledger with a `unique(user_id, kind, dedup_key)` constraint guarantees every alert is sent at most once; zero-match digest days are still claimed so scans never repeat. The gear icon in the notification bell opens the preferences matrix and push opt-in.
+
+Scheduled jobs live in `vercel.json` (daily crons) and hit `POST /api/cron/deadline-reminders`, `/api/cron/match-digest`, `/api/cron/followups`, each protected by `Authorization: Bearer $CRON_SECRET`. Required env vars: `CRON_SECRET`, `VAPID_PUBLIC_KEY` (browser, exposed as `VITE_VAPID_PUBLIC_KEY`), `VAPID_PRIVATE_KEY` (server-only secret), `VAPID_SUBJECT` (`mailto:`), optional `RESEND_API_KEY` / `RESEND_FROM`. The service-role key and VAPID private key never leave the backend.
+
 ## TinyFish docs verified (16 Oct 2026)
 - Search: `GET https://api.search.tinyfish.ai?query=&location=IN&language=en`
 - Fetch: `POST https://api.fetch.tinyfish.ai` body `{urls[], format:"markdown", links:true}` (max 10)

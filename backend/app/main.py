@@ -8,7 +8,8 @@ from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
 load_dotenv()
 from .models import ResearchRequest, SearchRequest, ResearchResponse
-from . import tinyfish, supabase_store
+from . import tinyfish, supabase_store, notifications as notif_engine
+from . import emailer, push as push_lib
 from .extraction import extract_opportunity, dedupe, apply_filters, sort_opps, valid_url, classify_link_status
 from .demo_data import DEMO
 
@@ -34,7 +35,30 @@ async def rate_limit(request:Request, call_next):
     return await call_next(request)
 
 @app.get("/api/health")
-def health(): return {"status":"ok","tinyfish_configured":tinyfish.has_key(),"demo_mode":not tinyfish.has_key(),"supabase_configured":supabase_store.configured(),"storage":"in-memory + Supabase cloud sync + browser localStorage","portal":"internships & placements"}
+def health(): return {"status":"ok","tinyfish_configured":tinyfish.has_key(),"demo_mode":not tinyfish.has_key(),"supabase_configured":supabase_store.configured(),"email_configured":emailer.configured(),"push_configured":push_lib.configured(),"storage":"in-memory + Supabase cloud sync + browser localStorage","portal":"internships & placements"}
+
+# ---------- Scheduled notification jobs (Vercel cron, CRON_SECRET protected) ----------
+def require_cron(request:Request):
+    secret=os.getenv("CRON_SECRET","").strip()
+    if not secret:
+        raise HTTPException(status_code=503, detail="Cron jobs are not configured (set CRON_SECRET).")
+    if request.headers.get("authorization","")!=f"Bearer {secret}":
+        raise HTTPException(status_code=401, detail="Invalid cron credentials.")
+
+@app.post("/api/cron/deadline-reminders")
+async def cron_deadline_reminders(request:Request):
+    require_cron(request)
+    return await notif_engine.run_deadline_reminders()
+
+@app.post("/api/cron/match-digest")
+async def cron_match_digest(request:Request):
+    require_cron(request)
+    return await notif_engine.run_match_digest()
+
+@app.post("/api/cron/followups")
+async def cron_followups(request:Request):
+    require_cron(request)
+    return await notif_engine.run_followups()
 
 @app.get("/api/categories")
 def categories(): return {"categories":CATEGORIES}
