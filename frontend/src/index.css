@@ -167,15 +167,6 @@ body {
     linear-gradient(120deg, rgba(6, 13, 34, 0.55), rgba(0, 191, 166, 0.18) 55%, rgba(6, 13, 34, 0.35));
   mix-blend-mode: normal;
 }
-/* Bottom scrim for legible captions/floating chips over photos. */
-.photo-scrim::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  z-index: 1;
-  background: linear-gradient(to top, rgba(6, 13, 34, 0.72) 0%, rgba(6, 13, 34, 0.25) 38%, transparent 62%);
-}
 .font-display { font-family: var(--font-display); font-weight: 400; letter-spacing: -0.01em; }
 
 * { scrollbar-width: thin; scrollbar-color: #c6d0e8 transparent; }
