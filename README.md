@@ -1,117 +1,258 @@
 # FormSaathi — Internship & Placement Portal
 
-Working end-to-end app: **React+TypeScript+Vite+Tailwind** frontend, **FastAPI** backend, **TinyFish Search/Fetch (Agent fallback)** for live web research. No database.
+**Live site:** https://formsaathi-ten.vercel.app
 
-The portal covers **two listing types only — Internships and Placement (campus/full-time) jobs**. Researched pages that are not internship or job listings (scholarships, hackathons, courses, events, etc.) are dropped from the output automatically.
+FormSaathi is a student-facing portal that brings internship and campus-placement discovery, application tracking, safety checks and smart reminders into one place. It is built with **React + TypeScript + Vite + Tailwind** (frontend), **FastAPI (Python)** (backend), **Supabase Postgres** (auth, data, realtime) and **TinyFish Search/Fetch** (live web research), deployed on **Vercel** with scheduled cron jobs.
 
-> Demo mode: without a TinyFish key the app shows clearly-labelled `[DEMO]` sample records (example.com — not real). Nothing is faked as “live”.
+The portal covers **two listing types only — Internships and Placement (campus/full-time) jobs**. Researched pages that are not real listings (scholarships, hackathons, courses, events, CAPTCHA/404/error pages) are dropped automatically and can never become job cards.
 
-## What changed for the portal
-- **Scope filter**: extraction classifies each page as `Internship`, `Placement`, or drops it. Only the two portal categories exist end-to-end.
-- **Structured job data**: every listing carries `role` (e.g. Frontend Developer, Data Analyst), `skills[]`, city-level `location`, work `mode` (Remote/Hybrid/In-person), and `compensation` (stipend/salary/CTC, verbatim from the page — `null` when not stated).
-- **Role / skill / location filters**: filter sidebar on the Browse Jobs page, plus job type, work mode, compensation band, deadline status and sort; the same filters are available on `POST /api/opportunities/search`.
-- **Professional UI**: clear homepage with keyword + location search, latest-openings section, filter-sidebar job listing, and a structured job-details view with prominent **Apply on Official Site** actions.
+> **Demo mode:** without a TinyFish API key the app shows clearly-labelled `[DEMO]` sample records (example.com URLs — not real). Nothing is ever faked as a live result, and no statistic is invented anywhere in the product.
 
-## Phase 1 features (student workflow)
-- **Application tracker** — move listings through Saved → Applied → Interview → Offer → Rejected with per-application notes; a Kanban tracker view, stored in `localStorage` (old `fs-saved` bookmarks are migrated automatically).
-- **Student profile & match score** — save skills, preferred cities, work mode, batch and degree on the device; every card shows an explainable 0–100% match (skill overlap 70%, location 15%, mode 15%).
-- **Fraud & scam protection** — backend rules flag registration fees, deposits, pay-to-join asks and suspicious UPI payments (negated phrases like "no registration fee" are ignored); warnings render on cards and details, plus a permanent safety note and a **Report listing** flow.
-- **Numeric compensation** — `parse_compensation()` normalizes stipends and CTC into monthly INR (`compensation_min/max`, `compensation_kind`), powering compensation-band filters; the original wording is always displayed.
-- **Calendar export** — one-click `.ics` download for any listing with a confirmed deadline.
+---
 
-## Resume-driven job discovery
-- **Upload a resume (PDF, DOCX or TXT, up to 5MB)** on the homepage or from the profile modal. Parsing runs entirely in the browser via lazy-loaded `pdfjs-dist` / `mammoth` — the file never leaves the device and only the derived profile (skills, role, degree, batch, cities) is stored in `localStorage`.
-- A **review screen** shows everything detected (deterministic dictionary/regex matching in `frontend/src/lib/resume.ts`) and lets the student correct it before searching — extraction is never treated as perfect.
-- On confirm, the resume builds the TinyFish research query itself (role + top skills + city + internship/placement), prefills the match-scoring profile, and switches results to a **“Best match for you”** sort using the existing weighted match score (skills 70%, location 15%, mode 15%).
-- Scanned/image PDFs with no text layer return a clear message asking for a text-based file instead of failing silently.
+## Table of contents
 
-## API
-`GET /api/health` · `GET /api/categories` (`Internship`, `Placement`) · `GET /api/opportunities/demo` · `POST /api/opportunities/research` · `POST /api/opportunities/search` (filter/sort by category, role, skill, location, mode, deadline, `comp_band`) · `GET /api/opportunities/{id}` · `POST /api/opportunities/validate`
+1. [Complete feature guide](#complete-feature-guide) — every feature, what it is and why it exists
+2. [API reference](#api-reference)
+3. [How the research pipeline works](#how-the-research-pipeline-works)
+4. [Security & privacy](#security--privacy)
+5. [Database & migrations](#database--migrations)
+6. [Run locally](#run-locally)
+7. [Tests](#tests)
+8. [Project structure](#project-structure)
+9. [Deploy on Vercel](#deploy-on-vercel)
+10. [Known limits](#known-limits)
 
-## Notification suite (Phase 3)
-Three alert kinds, each deliverable over three channels, with per-user toggles (defaults: in-app **on**, email/push **off**):
-- **Deadline reminders** — saved/tracked listings closing within 48 hours (rejected listings excluded).
-- **Saved-search match digest** — one daily digest per saved search, using the same token-overlap (≥0.6) and location rules as the app.
-- **Application follow-ups** — nudge when an `applied` row has not moved for 7 days.
+---
 
-Channels: in-app (Supabase `notifications`, real-time bell), email (Resend — dormant until `RESEND_API_KEY` is set) and browser Web Push (VAPID; Safari/unsupported browsers degrade gracefully). A `notification_events` ledger with a `unique(user_id, kind, dedup_key)` constraint guarantees every alert is sent at most once; zero-match digest days are still claimed so scans never repeat. The gear icon in the notification bell opens the preferences matrix and push opt-in.
+# Complete feature guide
 
-Scheduled jobs live in `vercel.json` (daily/weekly crons) and hit `GET /api/cron/deadline-reminders`, `/api/cron/match-digest`, `/api/cron/followups` (POST is also accepted for manual runs), each protected by the `Authorization: Bearer $CRON_SECRET` header that Vercel attaches automatically. Required env vars: `CRON_SECRET`, `VAPID_PUBLIC_KEY` (browser, exposed as `VITE_VAPID_PUBLIC_KEY`), `VAPID_PRIVATE_KEY` (server-only secret), `VAPID_SUBJECT` (`mailto:`), optional `RESEND_API_KEY` / `RESEND_FROM`. The service-role key and VAPID private key never leave the backend.
+## 1. Live job discovery (web research)
 
-## Phase 4 — insights, catalogue health, PWA and moderation
-- **Insights dashboard** (`Insights` nav item): pure, deterministic analytics over the student's own tracker — application funnel, applied/interview/offer rates (with explicit denominators, shown as “—” until enough data exists), six-month pipeline activity, top skills/locations and upcoming deadlines. Empty inputs render empty states; nothing is estimated.
-- **Catalogue-health automation**: `GET /api/cron/catalogue-health` (daily 04:00 UTC) re-probes listings not checked for 3 days using the same HEAD→GET fallback and `ok | broken | unknown` classification as manual rechecks. Past deadlines flip to `expired`; three consecutive `broken` probes auto-hide a listing, and every student who saved it gets one preference-gated `health` notification (their tracker entry is kept). Bot walls/timeouts stay `unknown` and never count against a listing.
-- **Installable PWA**: `manifest.webmanifest`, generated 192/512/maskable/apple-touch icons, an installable standalone shell, network-first navigations with an `/offline.html` fallback and stale-while-revalidate caching for hashed assets. Supabase/API traffic is never cached. The service worker also remains the Web Push delivery path.
-- **Moderation queue**: `profiles.is_admin` gates a `Moderation` nav item and view (RLS-enforced in Postgres, not just hidden UI). Admins triage `listing_reports` (hide & resolve, dismiss, reopen), restore auto-hidden listings, and hidden rows disappear from the public catalogue for everyone except admins. A fourth preference row (`health_*`) controls listing-health alerts.
+**What it is:** a keyword + location search on the homepage that asks the FastAPI backend to research the live web through TinyFish Search/Fetch (with an Agent fallback). The backend fetches real pages, extracts structured data and returns deduplicated listings. Identical searches are cached for 10 minutes.
 
-## TinyFish docs verified (16 Oct 2026)
-- Search: `GET https://api.search.tinyfish.ai?query=&location=IN&language=en`
-- Fetch: `POST https://api.fetch.tinyfish.ai` body `{urls[], format:"markdown", links:true}` (max 10)
-- Agent: `POST https://agent.tinyfish.ai/v1/automation/run` body `{url, goal, output_schema}`
-- All use header `X-API-Key` — **only on the backend**, never in React.
+**Use:** students find current openings in one search instead of visiting ten job boards, WhatsApp groups and company sites. Research is rate-limited (10 requests/minute/IP, proper `429` response) and every URL passes an SSRF guard (no localhost/private addresses).
 
-## Beginner setup (2 terminals)
+## 2. Strict portal scope & bad-page rejection
 
-### Terminal 1 — Backend
+**What it is:** the extraction pipeline classifies every fetched page as `Internship`, `Placement`, or drops it. Error pages, bot walls, CAPTCHAs, 404/5xx pages and non-job content never render as listings; any bad rows that somehow persist are purged on load.
+
+**Use:** guarantees the catalogue stays relevant and trustworthy — a broken fetch can never appear as a fake job title.
+
+## 3. Structured, honest listing data
+
+**What it is:** every card carries role, hiring organizer, required skills, eligibility, city-level location, work mode (Remote/Hybrid/In-person), deadline (with open/closing-soon/expired/unknown status), compensation and source links. Missing fields are shown as `unknown` — extraction is deterministic and never invents values. Compensation is also normalized into monthly INR (`compensation_min/max`) while the original wording stays visible.
+
+**Use:** students get comparable, verifiable information with a direct link to the official source for every claim.
+
+## 4. Browse Jobs — filters, sorting and pagination
+
+**What it is:** a filter sidebar with category, role, skill, location, work mode, deadline status and compensation band (unpaid / up to ₹10k / ₹10–25k / ₹25k+), plus sorting including **"Best match for you"** against the student's profile, and Load-more pagination.
+
+**Use:** narrows hundreds of results to the few that actually fit a student's skills, city and budget in seconds.
+
+## 5. Job details — match score, safety and actions
+
+Each listing opens a structured detail view containing:
+
+- **Explainable match score (0–100%)** — 70% skill overlap, 15% location, 15% work mode, with hover text showing exactly which skills matched. *Use:* students instantly see why a job is (or isn't) right for them.
+- **Fraud & scam warnings** — backend rules flag registration fees, deposits, pay-to-join asks and suspicious UPI payments, while correctly ignoring negations like "no registration fee". A permanent safety note and a **Report listing** flow accompany every job. *Use:* protects students from the common paid-internship scams targeting freshers.
+- **Link health re-check** — a live probe (HEAD then GET fallback) classifies the apply/source link as `ok`, `broken` or `unknown`; bot walls and timeouts stay `unknown` and are never misreported as dead. *Use:* no more applying through expired or broken links.
+- **Calendar export** — one-click `.ics` download for any listing with a confirmed deadline. *Use:* deadlines land directly in Google/Apple Calendar.
+- **Apply on official site** — FormSaathi never collects applications itself; the button always goes to the company's official page.
+
+## 6. Resume-driven job discovery
+
+**What it is:** upload a **PDF, DOCX or TXT resume (max 5 MB)** on the homepage. Parsing runs **entirely in the browser** (lazy-loaded `pdfjs-dist` / `mammoth`) — the file never touches a server. A review screen shows the detected skills, target role, degree, batch year and cities, all editable, because extraction is never treated as perfect. On confirm, the resume builds the research query itself, prefills the student profile and switches results to best-match sorting. Scanned/image-only PDFs get a clear "use a text-based file" message instead of a silent failure. A ready-made sample lives in [`demo/`](demo/) (`Aarav_Mehta_Resume_Sample.pdf`).
+
+**Use:** one upload turns a static resume into a personalized job search with zero manual filter setup — while keeping the document private on the student's own device.
+
+## 7. Student profile
+
+**What it is:** save skills, preferred cities, work modes, batch and degree. The profile powers match scores, best-match sorting and personalized notifications, and syncs to the cloud after sign-in.
+
+**Use:** the single source of truth for personalization across search, alerts and insights.
+
+## 8. Saved listings & application tracker (Kanban)
+
+**What it is:** bookmark any listing, then move it through five stages — **Saved → Applied → Interview → Offer → Rejected** — on a Kanban board with per-application notes and live stage counts. Data works offline in `localStorage` and migrates automatically to the cloud on sign-in (legacy bookmarks included).
+
+**Use:** replaces scattered spreadsheets with one pipeline showing exactly where every application stands.
+
+## 9. Companies view
+
+**What it is:** current results grouped by hiring organizer with verification badges. Organizer names come from page text or the domain; when genuinely unstated, the listing says so rather than inventing a company.
+
+**Use:** students can compare all openings from one employer together.
+
+## 10. Accounts, magic-link auth and cross-device sync
+
+**What it is:** password-less email **magic link** authentication via Supabase. A profile row is created automatically on signup, and tracker entries, saved searches, notifications and preferences sync across devices. Every user-facing table is protected by **Row Level Security (RLS)** Postgres policies — users can only read/write their own rows, enforced in the database, not just hidden in the UI. The service-role key never reaches the browser.
+
+**Use:** students pick up their job hunt on any device without managing another password, and their data stays private.
+
+## 11. Notification suite (4 alert kinds × 3 channels)
+
+**What it is:** a realtime notification bell plus a preference matrix (gear icon) where each alert kind can independently use three channels — **in-app, email, browser push**. Defaults: in-app **on**, email/push **off** (opt-in).
+
+**Alert kinds**
+
+| Alert | When it fires |
+|---|---|
+| Deadline reminders | A saved/tracked listing closes within **48 hours** (rejected listings excluded) |
+| Saved-search match digest | One daily digest per saved search, using the same ≥0.6 token-overlap and location rules as the app |
+| Application follow-ups | An `applied` row has not moved for **7 days** |
+| Listing health | A saved listing repeatedly fails link checks and gets hidden |
+
+**Channels:** in-app (Supabase realtime bell, unread badge, mark-all-read) · email (Resend — **dormant until `RESEND_API_KEY`** is set, branded HTML + text fallback) · browser Web Push (self-generated VAPID keys, service-worker delivery, works with the tab closed; unsupported browsers such as older Safari hide the option gracefully).
+
+**Reliability:** a `notification_events` ledger with a `unique(user_id, kind, dedup_key)` constraint makes every alert fire **at most once**; zero-match digest days are still recorded so scans never repeat. Dead push endpoints (404/410) are pruned automatically. All jobs run on secret-protected daily/weekly cron schedules.
+
+**Use:** students never miss a deadline, a matching opening or a forgotten follow-up, and choose exactly how loudly each type of alert reaches them.
+
+## 12. Insights dashboard
+
+**What it is:** an analytics page computed purely from the student's own tracker: the five-stage application funnel, applied/interview/offer conversion rates (each with an explicit denominator — shown as "—" until enough data exists), six-month pipeline activity, top skills and locations in the pipeline, and the nearest upcoming deadlines. Empty data renders an empty state.
+
+**Use:** evidence-based self-review — "how many applications actually convert to interviews?" — without any fabricated or benchmarked numbers.
+
+## 13. Catalogue-health automation
+
+**What it is:** a daily cron re-probes listings not checked for 3 days using the same careful classification as manual re-checks. Past deadlines flip to `expired`; **three consecutive `broken` probes auto-hide** a listing and notify every student who saved it (once each, preference-gated, tracker history preserved). Bot walls/timeouts remain `unknown` and never count against a listing.
+
+**Use:** the catalogue self-cleans, so students never act on dead opportunities and always know when a saved one was removed.
+
+## 14. Installable PWA with offline support
+
+**What it is:** a web manifest, generated 192/512/maskable/Apple-touch icons and a service worker let students "Add to Home Screen" and run FormSaathi as a standalone app. Navigations are network-first (updates appear immediately) with a branded `/offline.html` fallback; hashed assets use stale-while-revalidate caching. Supabase/API traffic is never cached. The same worker delivers Web Push.
+
+**Use:** native-app feel and zero-install distribution — works on flaky college/hostel Wi-Fi, no app store needed.
+
+## 15. Admin moderation queue
+
+**What it is:** users with `profiles.is_admin = true` see a **Moderation** area (invisible to everyone else) where they triage student-submitted listing reports — hide & resolve, dismiss or reopen — and restore auto-hidden listings. RLS policies enforce admin rights inside Postgres, so even crafted requests from non-admins are rejected. Hidden listings disappear from the public catalogue for all users except admins.
+
+**Use:** a defensible, auditable safety workflow that keeps scam and broken listings out without trusting the client.
+
+## 16. Demo & presentation assets
+
+- [`demo/`](demo/) — fictional sample resume in PDF/DOCX/TXT tuned to exercise the parser, with expected output documented.
+- `DEMO_SCRIPT_HINGLISH.md` / `.txt` — a full Hinglish walkthrough script covering every feature, with viva Q&A and a timing sheet.
+
+---
+
+# API reference
+
+All routes are served under `/api` by the FastAPI app (`backend/app/main.py`).
+
+| Method & path | Purpose |
+|---|---|
+| `GET /health` | Service status and which integrations are configured |
+| `GET /categories` | The two portal categories: Internship, Placement |
+| `GET /opportunities/demo` | Clearly-labelled sample listings for demo mode |
+| `POST /opportunities/research` | Live web research, extraction, dedupe and persistence |
+| `POST /opportunities/search` | Filter/sort the current catalogue |
+| `GET /opportunities/{id}` | Fetch one listing |
+| `POST /opportunities/validate` | URL validation (SSRF-guarded) |
+| `POST /opportunities/recheck` | Live link-health probe for one listing |
+| `GET|POST /cron/deadline-reminders` | Scheduled deadline alerts (`CRON_SECRET` protected) |
+| `GET|POST /cron/match-digest` | Scheduled saved-search digests |
+| `GET|POST /cron/followups` | Weekly stale-application nudges |
+| `GET|POST /cron/catalogue-health` | Daily link re-validation and auto-hide sweep |
+
+Cron routes accept GET (how Vercel invokes them) and POST (manual triggers), require `Authorization: Bearer $CRON_SECRET`, return `401` on a bad token and `503` when the secret is unset.
+
+# How the research pipeline works
+
+Search query (augmented with role/skills/location/type + "India") → TinyFish Search → Fetch (batched, ≤5 by default) → **portal scope check** (non-job pages dropped) → deterministic Python extraction (role, skills, city, deadline regex, eligibility, stipend/salary/CTC, apply links — missing = `null`/`unknown`) → error/bot-page detection → dedupe by normalized title + organizer (official source preferred) → deadline status (`open`, `closing_soon` ≤14 days, `expired`, `unknown`) → Supabase persistence → cards with source links.
+
+# Security & privacy
+
+- **Service-role key and VAPID private key are backend-only**; the browser only ever holds the anon/publishable key and the VAPID *public* key.
+- **RLS on every user table**; admin actions gated by Postgres policies, not UI flags.
+- **SSRF guard** on all probed URLs (http/https only, no localhost/private IPs); per-IP rate limiting on research.
+- **Resume files never leave the device** — parsing is fully in-browser.
+- No `.env` files are committed; secrets live in Vercel project environment variables.
+- Push dedup ledger has no client-facing policy (service-role cron access only).
+
+# Database & migrations
+
+Supabase Postgres, SQL migrations in [`supabase/migrations/`](supabase/migrations/):
+
+- `0001_init.sql` — profiles, opportunities (public read), saved listings, saved searches, notifications, listing reports, signup trigger
+- `0002_saved_listings_snapshots.sql` — offline-first denormalized snapshots (drop hard FK, add `title`/`snapshot`)
+- `0003_notification_suite.sql` — notification preferences, push subscriptions, dedup ledger
+- `0004_phase4.sql` — admin flag, hidden/failed-checks moderation columns, report triage, health-alert preferences
+
+# Run locally
+
+### Backend (terminal 1)
 ```bash
-cd formsaathi/backend
+cd backend
+python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env
-# open .env and replace your_key_here with your key from https://agent.tinyfish.ai/api-keys
+cp .env.example .env   # fill TinyFish / Supabase / VAPID / CRON values (see .env.example)
 uvicorn app.main:app --reload --port 8000
+# check: http://localhost:8000/api/health
 ```
-Check: open http://localhost:8000/api/health → `tinyfish_configured` should be `true` after adding a real key.
 
-### Terminal 2 — Frontend
+### Frontend (terminal 2)
 ```bash
-cd formsaathi/frontend
+cd frontend
 npm install
-npm run dev
+cp .env.example .env.local   # VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY, VITE_VAPID_PUBLIC_KEY
+npm run dev                  # http://localhost:5173 (proxies /api to :8000)
 ```
-Open **http://localhost:5173**
 
-### Test a real search
-1. In the homepage search box type `React developer internship in Bengaluru` (optionally add a location).
-2. Click **Search Jobs** → stats show candidates / fetched / valid listings / duplicates removed.
-3. Use the sidebar to filter by **role, skill, location, mode, compensation band or deadline**, then click **View Details** → verify match score, scam warnings, deadline, skills, compensation and source link. Always apply on the official company site yourself.
+Without optional keys the app still runs: missing TinyFish → demo mode; missing Resend → email dormant; missing VAPID → push option hidden.
 
-## How it works & limits
-Search (query is augmented with role/skills/location/type + “India”) → Fetch (batch ≤5 by default) → **portal scope check** (non-job pages dropped) → deterministic Python extraction (role detection, skill dictionary, city detection, deadline regex, eligibility lines, stipend/salary/CTC, apply links — missing = `null`/`unknown`, never invented) → dedupe by exact normalized title+organizer (official source preferred) → deadline status (`open` only with a future known deadline, `closing_soon` ≤14d, `expired`, else `unknown`) → cards with source links.
-- Cache: identical research cached 10 min in backend memory (UI says “served from cache”). Research results disappear on backend restart.
-- Saved/recent/preferences: browser `localStorage` only — no sync, no account.
-- Rate limit: 10 research req/min/IP (returns a proper 429). URLs validated (http/https, no localhost/private).
-- Agent fallback: only when you enable it / Fetch yields nothing — narrow goal, no CAPTCHA/paywall bypass, never auto-submits.
+# Tests
 
-## Tests
 ```bash
-cd backend && python -m pytest tests/ -q   # 44 tests: extraction/fraud/compensation/dedupe/filters,
-                                           # notification dispatch, dedup ledger, cron auth, catalogue health
-cd ../frontend && npm run build            # type-check + production build
-npm run lint                               # oxlint — 0 warnings
-```
-Live TinyFish Search/Fetch could not be tested here (no API key in this environment) — the code paths follow the verified docs above and return a clear 502 if TinyFish rejects a request.
-
-## Structure
-```
-backend/app/{main,tinyfish,extraction,models,demo_data,supabase_store,emailer,push,notifications,health}.py  backend/tests/
-frontend/src/{App.tsx,types.ts,index.css}  frontend/src/components/  frontend/src/lib/
-frontend/public/{sw.js,manifest.webmanifest,offline.html,icons/}
-supabase/migrations/0001_init.sql … 0004_phase4.sql
+cd backend && source .venv/bin/activate
+python -m pytest tests/ -q     # 44 tests: extraction, fraud, compensation, dedupe, filters,
+                               # notification dispatch/dedup, cron auth, catalogue health
+cd ../frontend
+npm run lint                   # oxlint — 0 warnings
+npm run build                  # tsc type-check + production Vite build
 ```
 
-## 🌐 Go live on Vercel (public website)
-This repo is ready for a **single Vercel project**: frontend (static) + backend (Python serverless `api/index.py` reusing the same FastAPI app). Files: `vercel.json`, `requirements.txt` (root), `api/index.py`.
+# Project structure
 
-**Exact steps (5–8 min, free account):**
-1. Put this `formsaathi` folder on GitHub (do NOT commit `backend/.env` — it's git-ignored; check with `git status` that `.env` is absent).
-2. Go to https://vercel.com → Sign up/Login → **Add New → Project** → import your GitHub repo.
-3. **Root Directory = `formsaathi`** (the folder containing `vercel.json`). Framework: Other (vercel.json already sets build/output).
-4. Before deploying, open **Settings → Environment Variables** and add:
-   - `TINYFISH_API_KEY` = your key (Production + Preview)
-   - `FRONTEND_ORIGIN` = `*`
-5. Click **Deploy**. When done Vercel gives you a public URL like `https://formsaathi-xxx.vercel.app`.
-6. Test: open that URL → search "React internship" → you should see real listings and stats (not DEMO). Also open `https://YOUR-URL/api/health` → `"tinyfish_configured": true`.
+```
+backend/app/
+  main.py            FastAPI routes (research, search, recheck, protected crons)
+  tinyfish.py        Search/Fetch/Agent client
+  extraction.py      deterministic listing extraction, fraud rules, link classification
+  notifications.py   alert runners, preferences, dedup ledger, channel dispatch
+  health.py          catalogue-health sweep and URL prober
+  emailer.py         Resend integration (dormant without key)
+  push.py            VAPID Web Push (pywebpush)
+  supabase_store.py  service-role PostgREST client
+frontend/src/
+  components/        UI (Navbar, JobCard, TrackerBoard, InsightsView, AdminView, modals…)
+  lib/               cloud sync, auth, resume parsing, match scoring, PWA, push, insights
+  public/            sw.js, manifest.webmanifest, offline.html, icons/, images/
+supabase/migrations/ 0001 … 0004
+demo/                fictional sample resume for parser demos
+vercel.json          frontend + backend services and the four cron schedules
+```
 
-**Notes:** Vercel serverless has a 60s function limit (set in vercel.json) — keep `max_fetch` ≤5. In-memory cache/results reset between serverless invocations (expected, no database by design). If a deploy fails, open the Vercel build log and share the red error lines — do not share your key.
+# Deploy on Vercel
 
-⚠️ **Security:** If your key was pasted in chat, keep it only in local `backend/.env` (git-ignored). Consider rotating it at agent.tinyfish.ai/api-keys and updating both `.env` and the Vercel env var.
+The repository deploys as one Vercel project driven by [`vercel.json`](vercel.json): a Vite frontend service and a FastAPI backend service, with rewrite rules sending `/api/*` to the backend and four cron jobs (deadline reminders 03:00, match digest 03:15, catalogue health 04:00 daily; follow-ups Mondays 05:00 UTC — all within Hobby daily-cron limits).
+
+1. Import the GitHub repo into Vercel; the services are detected from `vercel.json`.
+2. Add environment variables:
+   - **Backend:** `TINYFISH_API_KEY` (optional), `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `CRON_SECRET`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`, optional `RESEND_API_KEY` / `RESEND_FROM`, `FRONTEND_ORIGIN`
+   - **Frontend:** `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_VAPID_PUBLIC_KEY`
+3. Apply the SQL migrations in `supabase/migrations/` in order.
+4. Deploy — crons attach automatically and call the backend with the bearer secret.
+
+# Known limits
+
+- Without `TINYFISH_API_KEY` the product runs in clearly-labelled demo mode.
+- In-memory research caches reset between serverless invocations; persistent data lives in Supabase.
+- Email alerts stay dormant until a Resend key is configured; in-app and push work without it.
+- Hobby cron timing is per-hour precision, not minute-exact, and jobs run at most once per day.
+- Some employer sites block automated probes; these are reported as `unknown`, never as broken.
