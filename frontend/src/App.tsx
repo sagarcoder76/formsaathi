@@ -253,7 +253,7 @@ export default function App() {
   const stageCounts = (['applied', 'interview', 'offer', 'rejected'] as Stage[]).map(s => ({ stage: s, count: trackerEntries.filter(e => e.stage === s).length }))
 
   return (
-    <div className="min-h-screen bg-canvas dark:bg-[#070d1f] text-ink dark:text-slate-100">
+    <div className="min-h-screen bg-canvas dark:bg-[#070d1f] text-ink dark:text-slate-100 pb-[calc(5.25rem+env(safe-area-inset-bottom))] lg:pb-0">
       <Navbar view={view} onNavigate={setView} trackerCount={activeEntries.length} savedCount={savedEntries.length}
         profileFilled={profile.filled} onOpenProfile={() => setProfileOpen(true)} onFindJobs={() => research()}
         dark={dark} onToggleDark={() => setDark(!dark)} authEnabled={authEnabled} uid={uid} userEmail={userEmail}
