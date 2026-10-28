@@ -1,0 +1,38 @@
+AARAV MEHTA
+Frontend Developer (React | TypeScript) — B.Tech 2027
+New Delhi, India  |  +91 98765 43210  |  aarav.mehta.demo@example.com
+GitHub: github.com/aaravmehta-demo  |  LinkedIn: linkedin.com/in/aaravmehta-demo
+
+CAREER OBJECTIVE
+Final-year B.Tech Computer Science student looking for a Frontend Developer internship where I can build accessible, fast web applications with React and TypeScript, and grow into a full-time product engineering role.
+
+EDUCATION
+- B.Tech, Computer Science and Engineering — Delhi Technological University, New Delhi (2023 – 2027) — CGPA: 8.6 / 10
+- Class XII (CBSE), Science — DAV Public School, Gurugram, Haryana (2023) — 92%
+- Class X (CBSE) — DAV Public School, Gurugram, Haryana (2021) — 94%
+
+TECHNICAL SKILLS
+- Languages: JavaScript, TypeScript, Python, HTML, CSS, SQL
+- Frontend: React, Next.js, Tailwind, Figma
+- Backend & tools: Node.js, REST API, Git
+- Soft skills: Communication, Teamwork, Problem Solving, Presentation Skills
+
+PROJECTS
+* Campus Placement Tracker — React, TypeScript, Tailwind
+    - Built a single-page application where students move applications across Saved, Applied, Interview and Offer stages.
+    - Designed reusable React components and a localStorage data layer, with a dark mode and fully responsive layout.
+* Internship Aggregator — Next.js, Node.js, REST API
+    - Created a searchable catalogue of internship listings with role, skill and location filters and deadline badges.
+    - Connected a Node.js REST API and added saved searches so students get notified about new matching openings.
+
+INTERNSHIP EXPERIENCE
+* Frontend Developer Intern — TechStart Solutions, Gurugram (May 2026 – Jul 2026)
+    - Shipped reusable React components in TypeScript, cutting duplicate UI code across three product pages.
+    - Improved the careers page Lighthouse performance score from 71 to 94 by lazy-loading images and splitting bundles.
+    - Collaborated with designers in Figma and used Git for code reviews and daily stand-ups.
+
+CERTIFICATIONS
+Meta Front-End Developer Professional Certificate (Coursera, 2026)  •  AWS Academy Cloud Foundations (2025)
+
+LEADERSHIP & ACTIVITIES
+Lead, University Coding Club (2025–26)  •  Winner, Internal Hackathon 2026  •  Volunteer, annual placement cell mentoring sessions for first-year students.
