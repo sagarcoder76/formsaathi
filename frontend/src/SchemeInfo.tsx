@@ -1,11 +1,16 @@
 import { ArrowRight, ExternalLink, Landmark } from 'lucide-react'
 import './schemes.css'
 
-const links = [['guide', 'Step-by-step guide'], ['help', 'Help'], ['contact', 'Contact us']]
+const links: [string, string, string][] = [
+  ['home', 'Home page', '/'],
+  ['guide', 'Step-by-step guide', '/?view=guide'],
+  ['help', 'Help', '/?view=help'],
+  ['contact', 'Contact us', '/?view=contact'],
+]
 const assistant = '/?view=assistant'
 
-export function SchemeHeader({ active }: { active?: string }) {
-  return <header className="fs-top"><div className="fs-container fs-nav"><a className="fs-brand" href="/"><span><Landmark size={19}/></span>FormSaathi</a><nav aria-label="Main navigation">{links.map(([view, label]) => <a key={view} href={`/?view=${view}`} aria-current={active === view ? 'page' : undefined}>{label}</a>)}</nav></div></header>
+export function SchemeHeader({ active = 'home' }: { active?: 'home' | 'guide' | 'help' | 'contact' }) {
+  return <header className="fs-top"><div className="fs-container fs-nav"><a className="fs-brand" href="/"><span><Landmark size={19}/></span>FormSaathi</a><nav aria-label="Main navigation">{links.map(([view, label, href]) => <a key={view} href={href} aria-current={active === view ? 'page' : undefined}>{label}</a>)}</nav></div></header>
 }
 
 const steps = [
