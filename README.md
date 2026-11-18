@@ -1,4 +1,44 @@
-# FormSaathi — Internship & Placement Portal
+# FormSaathi — Government Scheme-Matching Assistant (Track A4)
+
+FormSaathi opens on a home page that explains the service. Choose **Scheme assistant** or `/?view=assistant` to start the bilingual interview. Use **Career tools** or `/?view=careers` for the existing internship and placement portal documented below.
+
+## Scheme assistant
+
+- Choose business, college or school support and answer **5–8 questions** in English or Hindi. The Python interview changes based on your answers. “Not sure” never counts as satisfying a rule.
+- The curated catalogue covers **PMEGP (new manufacturing and service units), PM MUDRA (including Tarun Plus), PM-USP CSSS (fresh college applications), and NMMSS (Class 8 selection-test screening)**. Reports show the rules each profile meets, what would need to change for a near miss, and what still needs confirmation.
+- Matches appear before near misses, then incomplete screens and non-matches. Within a category the ranking uses a fixed benefit preference (for business, a credit-linked subsidy before credit alone), not a predicted approval chance or a personalized rupee estimate.
+- Download a localized text report with official links. No login or personal identifiers are needed; the FastAPI endpoint does not store profiles.
+
+**Scope:** This is a preliminary screen, not an exhaustive national registry or an approval decision. Check current application windows, documents, local exclusions and lender or institutional requirements with the official source. The catalogue is curated in Python, not scraped live from MyScheme. Stand-Up India and state-specific programmes are not covered. For a large PMEGP project that also requires a Tarun Plus screen, PMEGP subsidy history is left for confirmation to keep the interview within eight questions.
+
+### Run the assistant
+
+```sh
+python -m venv .venv
+source .venv/bin/activate
+pip install -r backend/requirements.txt
+python -m uvicorn app.main:app --app-dir backend --host 0.0.0.0 --port 8000
+```
+
+In a second terminal:
+
+```sh
+cd frontend
+npm ci
+npm run dev
+```
+
+Open `http://localhost:5173`. Vite proxies `/api` to FastAPI. Run tests with `PYTHONPATH=backend .venv/bin/pytest backend/tests`.
+
+### Python API and optional AI summary
+
+`POST /api/schemes/intake` accepts `{"language":"en","answers":{}}` to start. Submit the accumulated answers keyed by each returned question ID. On completion the response includes sorted scheme results, localized rule checks, official links and the report text. The interview and matching engine are in `backend/app/schemes.py`; a stateless Python orchestrator is sufficient for this fixed workflow (no LangGraph or vector database required).
+
+No model key is needed for complete eligibility explanations. To enable the optional AI benefit summary, set `SCHEME_OPENAI_API_KEY` on the backend and optionally `SCHEME_OPENAI_MODEL` (default `gpt-4o-mini`). This requires network access to `api.openai.com`. Only public scheme titles and benefit descriptions are sent to the model, never profile answers or rule outcomes. Model errors leave the deterministic report unchanged.
+
+---
+
+# Career tools — Internship & Placement Portal
 
 **Live site:** https://formsaathi-ten.vercel.app
 

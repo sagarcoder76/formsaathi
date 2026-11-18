@@ -11,8 +11,10 @@ from . import tinyfish, supabase_store, notifications as notif_engine
 from . import emailer, push as push_lib, health as catalogue_health
 from .extraction import extract_opportunity, dedupe, apply_filters, sort_opps, valid_url
 from .demo_data import DEMO
+from .schemes import router as scheme_router
 
-app=FastAPI(title="FormSaathi Internship & Placement API", version="2.0.0")
+app=FastAPI(title="FormSaathi Assistant API", version="2.0.0")
+app.include_router(scheme_router)
 origin=os.getenv("FRONTEND_ORIGIN","http://localhost:5173")
 app.add_middleware(CORSMiddleware, allow_origins=["*"] if origin=="*" else [origin,"http://localhost:5173","http://127.0.0.1:5173"], allow_methods=["*"], allow_headers=["*"])
 
