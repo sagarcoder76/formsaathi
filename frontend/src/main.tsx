@@ -19,6 +19,9 @@ import { AuthProvider } from './lib/auth.tsx'
 import { ToastProvider } from './components/Toast.tsx'
 import ErrorBoundary from './components/ErrorBoundary.tsx'
 import { registerPWA } from './lib/pwa.ts'
+import { initTheme } from './lib/theme.ts'
+
+initTheme()
 
 const view = new URLSearchParams(window.location.search).get('view')
 const careers = view === 'careers'

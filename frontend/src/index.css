@@ -59,7 +59,7 @@ body {
   background: var(--color-canvas);
   color: var(--color-ink);
 }
-.dark body { background: #070d1f; }
+.dark body { background: #070d1f; color: #f1f5f9; }
 ::selection { background: var(--color-teal-500); color: #fff; }
 
 /* Tabular figures for stats & match percentages */
