@@ -2,17 +2,24 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowDownToLine, ArrowRight, Bookmark, BookmarkCheck, BookOpen, BriefcaseBusiness,
   Check, CheckCircle2, ClipboardCheck, Cloud, Copy, ExternalLink, FileCheck2,
-  GraduationCap, Languages, LogIn, LogOut, RotateCcw, Sparkles, Trash2, UserCheck, X,
+  GraduationCap, Languages, Layers, LogIn, LogOut, RefreshCw, RotateCcw, Sparkles,
+  Trash2, UserCheck, UserPlus, X,
 } from 'lucide-react'
-import { SchemeHeader } from './SchemeInfo'
-import AuthModal from './components/AuthModal'
+import { SchemeFooter, SchemeHeader } from './SchemeInfo'
+import SchemeAuthModal from './SchemeAuthModal'
+import { PROFILE_TYPE_CARDS, type SelectableProfileType } from './lib/profileTypes'
 import { useAuth } from './lib/auth'
 import { useToast } from './components/Toast'
 import {
   EMPTY_SCHEME_PROFILE,
+  SAMPLE_PROFILES,
   buildApplicationPacketText,
+  currentIsoTimestamp,
   deleteCloudSchemeApp,
+  docsForProfile,
+  goalsForProfileType,
   isProfilePopulated,
+  isValidProfileType,
   loadLocalSchemeApps,
   loadLocalSchemeProfile,
   pullCloudSchemeApps,
@@ -48,40 +55,6 @@ const STAGE_META: Record<SchemeAppStage, { en: string; hi: string; cls: string }
   under_review: { en: 'Under Verification', hi: 'सत्यापन जारी', cls: 'under_review' },
   approved: { en: 'Approved / Selected', hi: 'स्वीकृत / चयनित', cls: 'approved' },
   rejected: { en: 'Not Approved', hi: 'अस्वीकृत', cls: 'rejected' },
-}
-
-const ALL_DOCS: SchemeDocKey[] = [
-  'identity_address',
-  'bank_passbook',
-  'income_certificate',
-  'marksheets',
-  'bonafide_admission',
-  'business_plan',
-  'category_certificate',
-]
-
-const SAMPLE_PROFILE: SchemeProfile = {
-  full_name: 'Aarav Sharma',
-  state: 'Haryana',
-  category: 'obc',
-  goals: ['college', 'business', 'school'],
-  age: 20,
-  income: 320000,
-  stage: 'new',
-  sector: 'service',
-  budget: 600000,
-  loan: 400000,
-  repaid: 'no',
-  eighth: 'yes',
-  subsidy: 'no',
-  percentile: 'yes',
-  regular: 'yes',
-  gap: 'no',
-  aid: 'no',
-  grade: 8,
-  school_type: 'yes',
-  marks: 'yes',
-  documents: ['identity_address', 'bank_passbook', 'income_certificate', 'marksheets', 'bonafide_admission'],
 }
 
 function YesNoPills({
@@ -179,14 +152,29 @@ function NumberOrUnknownField({
   )
 }
 
+function loadInitialProfileWithUrlType(): SchemeProfile {
+  const base = loadLocalSchemeProfile()
+  const urlType = new URLSearchParams(window.location.search).get('type')
+  if (isValidProfileType(urlType) && urlType !== 'unset' && base.profile_type !== urlType) {
+    const updated: SchemeProfile = {
+      ...base,
+      profile_type: urlType,
+      goals: goalsForProfileType(urlType, base.goals),
+    }
+    saveLocalSchemeProfile(updated)
+    return updated
+  }
+  return base
+}
+
 export default function SchemeWorkflow({ initialTab }: { initialTab: 'profile' | 'wishlist' }) {
-  const { enabled: authEnabled, session, userEmail, signOut } = useAuth()
+  const { enabled: authEnabled, session, userEmail, userName, userProfileType, signOut } = useAuth()
   const uid = session?.user.id ?? null
   const toast = useToast()
 
   const [tab, setTab] = useState<'profile' | 'wishlist'>(initialTab)
   const [language, setLanguage] = useState<'en' | 'hi'>('en')
-  const [profile, setProfile] = useState<SchemeProfile>(loadLocalSchemeProfile)
+  const [profile, setProfile] = useState<SchemeProfile>(loadInitialProfileWithUrlType)
   const [apps, setApps] = useState<Record<string, SchemeApplicationEntry>>(loadLocalSchemeApps)
   const [matchData, setMatchData] = useState<ProfileMatchResponse | null>(null)
   const [loading, setLoading] = useState(true)
@@ -196,7 +184,8 @@ export default function SchemeWorkflow({ initialTab }: { initialTab: 'profile' |
     new URLSearchParams(window.location.search).get('apply'),
   )
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
-  const [authOpen, setAuthOpen] = useState(false)
+  const [authModalMode, setAuthModalMode] = useState<'login' | 'signup' | null>(null)
+  const [showTypePicker, setShowTypePicker] = useState(false)
 
   const syncTimer = useRef<number | null>(null)
   const latestState = useRef({ profile, apps })
@@ -214,7 +203,6 @@ export default function SchemeWorkflow({ initialTab }: { initialTab: 'profile' |
     window.history.replaceState(null, '', `/?${params.toString()}`)
   }
 
-  // Persist profile locally & debounce cloud sync
   const updateProfile = (updater: (prev: SchemeProfile) => SchemeProfile) => {
     setProfile(prev => {
       const next = updater(prev)
@@ -223,13 +211,36 @@ export default function SchemeWorkflow({ initialTab }: { initialTab: 'profile' |
         if (syncTimer.current) window.clearTimeout(syncTimer.current)
         syncTimer.current = window.setTimeout(() => {
           void pushCloudSchemeProfile(uid, next)
-        }, 450)
+        }, 350)
       }
       return next
     })
   }
 
-  // Cloud merge on sign-in
+  const selectProfileType = (chosen: SelectableProfileType) => {
+    updateProfile(prev => ({
+      ...prev,
+      profile_type: chosen,
+      goals: goalsForProfileType(chosen, prev.goals),
+    }))
+    setShowTypePicker(false)
+    const params = new URLSearchParams(window.location.search)
+    params.set('view', 'profile')
+    params.set('type', chosen)
+    window.history.replaceState(null, '', `/?${params.toString()}`)
+    const card = PROFILE_TYPE_CARDS.find(c => c.id === chosen)
+    if (card) {
+      toast.push(
+        t(
+          `Profile type set to "${card.enTitle}". Showing only its questions below!`,
+          `प्रोफ़ाइल प्रकार "${card.hiTitle}" चुना गया। नीचे केवल उसी के सवाल दिखाए गए हैं!`,
+        ),
+        'success',
+      )
+    }
+  }
+
+  // Cloud merge on Supabase sign-in + adopt auth metadata if local fields are unset
   useEffect(() => {
     if (!uid) return
     let cancelled = false
@@ -240,12 +251,40 @@ export default function SchemeWorkflow({ initialTab }: { initialTab: 'profile' |
       ])
       if (cancelled) return
       const curProfile = latestState.current.profile
-      if (cloudProfile && !isProfilePopulated(curProfile) && isProfilePopulated(cloudProfile)) {
-        setProfile(cloudProfile)
-        saveLocalSchemeProfile(cloudProfile)
-      } else if (isProfilePopulated(curProfile)) {
-        void pushCloudSchemeProfile(uid, curProfile)
+
+      let nextProfile = curProfile
+      if (cloudProfile && isProfilePopulated(cloudProfile)) {
+        // Prefer cloud profile when local profile has no answers yet, otherwise merge missing basics
+        if (!isProfilePopulated(curProfile) || curProfile.profile_type === 'unset') {
+          nextProfile = cloudProfile
+        } else {
+          nextProfile = {
+            ...cloudProfile,
+            ...curProfile,
+            full_name: curProfile.full_name.trim() || cloudProfile.full_name,
+            state: curProfile.state.trim() || cloudProfile.state,
+          }
+        }
       }
+
+      if (!nextProfile.full_name.trim() && userName) {
+        nextProfile = { ...nextProfile, full_name: userName }
+      }
+      if (
+        nextProfile.profile_type === 'unset' &&
+        isValidProfileType(userProfileType) &&
+        userProfileType !== 'unset'
+      ) {
+        nextProfile = {
+          ...nextProfile,
+          profile_type: userProfileType,
+          goals: goalsForProfileType(userProfileType, nextProfile.goals),
+        }
+      }
+
+      setProfile(nextProfile)
+      saveLocalSchemeProfile(nextProfile)
+      void pushCloudSchemeProfile(uid, nextProfile)
 
       const curApps = latestState.current.apps
       const mergedApps: Record<string, SchemeApplicationEntry> = { ...cloudApps }
@@ -262,7 +301,7 @@ export default function SchemeWorkflow({ initialTab }: { initialTab: 'profile' |
     return () => {
       cancelled = true
     }
-  }, [uid])
+  }, [uid, userName, userProfileType])
 
   // Live auto-match from backend whenever profile or language changes
   useEffect(() => {
@@ -305,9 +344,9 @@ export default function SchemeWorkflow({ initialTab }: { initialTab: 'profile' |
     scheme: Pick<MatchedScheme, 'id' | 'name' | 'goal' | 'source' | 'apply_url' | 'benefit'>,
     patch: Partial<Pick<SchemeApplicationEntry, 'stage' | 'applicationRef' | 'notes' | 'appliedAt'>>,
   ) => {
+    const now = currentIsoTimestamp()
     setApps(prev => {
       const existing = prev[scheme.id]
-      const now = new Date().toISOString()
       const nextStage = patch.stage ?? existing?.stage ?? 'wishlist'
       const appliedAt =
         patch.appliedAt !== undefined
@@ -364,6 +403,7 @@ export default function SchemeWorkflow({ initialTab }: { initialTab: 'profile' |
       if (has && prev.goals.length === 1) return prev
       return {
         ...prev,
+        profile_type: 'all_rounder',
         goals: has ? prev.goals.filter(g => g !== goal) : [...prev.goals, goal],
       }
     })
@@ -417,6 +457,16 @@ export default function SchemeWorkflow({ initialTab }: { initialTab: 'profile' |
     window.setTimeout(() => URL.revokeObjectURL(url), 1000)
   }
 
+  const activeTypeCard = useMemo(
+    () => PROFILE_TYPE_CARDS.find(c => c.id === profile.profile_type) ?? null,
+    [profile.profile_type],
+  )
+  const activeGoals = useMemo(
+    () => goalsForProfileType(profile.profile_type, profile.goals),
+    [profile.profile_type, profile.goals],
+  )
+  const relevantDocs = useMemo(() => docsForProfile(profile), [profile])
+
   const status = matchData?.profile_status
   const allSchemes = useMemo(() => matchData?.results ?? [], [matchData])
   const filteredSchemes = useMemo(() => {
@@ -456,29 +506,54 @@ export default function SchemeWorkflow({ initialTab }: { initialTab: 'profile' |
     school: t('School Scholarship', 'स्कूल छात्रवृत्ति'),
   }
 
+  const showAgeField = activeGoals.includes('business') || profile.profile_type === 'all_rounder'
+  const showIncomeField = activeGoals.includes('school') || activeGoals.includes('college')
+  const showEighthField =
+    activeGoals.includes('business') &&
+    (profile.budget === 'unknown' ||
+      profile.budget > (profile.sector === 'manufacturing' ? 1_000_000 : 500_000))
+  const showTarunPlusField =
+    activeGoals.includes('business') &&
+    typeof profile.loan === 'number' &&
+    profile.loan > 1_000_000 &&
+    profile.loan <= 2_000_000
+
   return (
     <div className="fs-home sw-page" lang={language}>
       <SchemeHeader active={tab === 'wishlist' ? 'wishlist' : 'profile'} />
 
       <main className="fs-container sw-main">
-        {/* Top utility bar: Cloud status + Bilingual switch */}
+        {/* Top utility bar: Supabase Auth Account + Bilingual switch */}
         <div className="sw-topbar">
           <div className="sw-cloud-pill">
             <Cloud size={15} />
             {uid ? (
               <>
-                <span>{t('Cloud synced', 'क्लाउड सिंक सक्रिय')} · <strong>{userEmail}</strong></span>
+                <span>
+                  {t('Supabase Cloud Synced', 'Supabase क्लाउड सिंक सक्रिय')} ·{' '}
+                  <strong>{userName || userEmail}</strong>
+                  {activeTypeCard && (
+                    <em className="sw-inline-type">
+                      {' '}· {language === 'hi' ? activeTypeCard.hiTitle : activeTypeCard.enTitle}
+                    </em>
+                  )}
+                </span>
                 <button type="button" className="sw-link-btn" onClick={() => void signOut()}>
-                  <LogOut size={13} /> {t('Sign out', 'साइन आउट')}
+                  <LogOut size={13} /> {t('Logout', 'लॉग आउट')}
                 </button>
               </>
             ) : (
               <>
-                <span>{t('Saved instantly in your browser', 'ब्राउज़र में तुरंत सुरक्षित')}</span>
+                <span>{t('Guest mode (browser storage)', 'गेस्ट मोड (ब्राउज़र में सहेजा गया)')}</span>
                 {authEnabled && (
-                  <button type="button" className="sw-link-btn" onClick={() => setAuthOpen(true)}>
-                    <LogIn size={13} /> {t('Sign in to sync across devices', 'क्लाउड सिंक के लिए साइन इन करें')}
-                  </button>
+                  <>
+                    <button type="button" className="sw-link-btn" onClick={() => setAuthModalMode('login')}>
+                      <LogIn size={13} /> {t('Login', 'लॉगिन')}
+                    </button>
+                    <button type="button" className="sw-link-btn" onClick={() => setAuthModalMode('signup')}>
+                      <UserPlus size={13} /> {t('Create Supabase Account', 'अकाउंट बनाएँ')}
+                    </button>
+                  </>
                 )}
               </>
             )}
@@ -498,43 +573,147 @@ export default function SchemeWorkflow({ initialTab }: { initialTab: 'profile' |
           </div>
         </div>
 
+        {/* Supabase Login Callout when logged out */}
+        {!uid && authEnabled && (
+          <section className="sw-auth-banner" aria-label={t('Save profile with Supabase account', 'Supabase अकाउंट में प्रोफ़ाइल सहेजें')}>
+            <div>
+              <strong>{t('Sign in with Supabase to keep your profile & applications forever', 'अपनी प्रोफ़ाइल और आवेदन हमेशा सुरक्षित रखने के लिए Supabase से लॉगिन करें')}</strong>
+              <p>
+                {t(
+                  'Create an account in 10 seconds with email & password — your profile type, answers, wishlist and application status sync automatically across devices.',
+                  'ईमेल और पासवर्ड से 10 सेकंड में अकाउंट बनाएँ — आपका प्रोफ़ाइल प्रकार, जवाब, विशलिस्ट और आवेदन स्थिति हर डिवाइस पर सिंक रहेगी।',
+                )}
+              </p>
+            </div>
+            <div className="sw-auth-banner-btns">
+              <button type="button" className="sw-apply-btn" onClick={() => setAuthModalMode('signup')}>
+                <UserPlus size={15} /> {t('Create Account', 'अकाउंट बनाएँ')}
+              </button>
+              <button type="button" className="sw-wish-btn" onClick={() => setAuthModalMode('login')}>
+                <LogIn size={15} /> {t('Login', 'लॉगिन करें')}
+              </button>
+            </div>
+          </section>
+        )}
+
+        {/* STEP 1: PROFILE TYPE SELECTOR (Shown prominently if unset OR when changing type) */}
+        {(profile.profile_type === 'unset' || showTypePicker) && tab === 'profile' && (
+          <section className="sw-type-selector-card" aria-labelledby="sw-type-heading">
+            <div className="sw-type-selector-head">
+              <div>
+                <span className="fs-kicker">
+                  <span /> {t('STEP 1 · DECIDE YOUR PROFILE TYPE', 'चरण 1 · अपनी प्रोफ़ाइल का प्रकार चुनें')}
+                </span>
+                <h2 id="sw-type-heading">
+                  {t('Who are you building this profile for?', 'आप किस प्रकार की प्रोफ़ाइल बनाना चाहते हैं?')}
+                </h2>
+                <p>
+                  {t(
+                    'Select your profile type below — FormSaathi will ask ONLY the questions and documents relevant to your profile type.',
+                    'नीचे अपना प्रोफ़ाइल प्रकार चुनें — FormSaathi आपसे केवल उसी प्रकार से जुड़े ज़रूरी सवाल और दस्तावेज़ पूछेगा।',
+                  )}
+                </p>
+              </div>
+              {profile.profile_type !== 'unset' && (
+                <button type="button" className="sw-subtle-btn" onClick={() => setShowTypePicker(false)}>
+                  <X size={14} /> {t('Keep current type', 'वर्तमान प्रकार रखें')}
+                </button>
+              )}
+            </div>
+
+            <div className="sw-type-grid">
+              {PROFILE_TYPE_CARDS.map(card => {
+                const Icon = card.icon
+                const selected = profile.profile_type === card.id
+                return (
+                  <button
+                    key={card.id}
+                    type="button"
+                    aria-pressed={selected}
+                    className={`sw-type-card ${selected ? 'active' : ''}`}
+                    onClick={() => selectProfileType(card.id)}
+                  >
+                    <div className="sw-type-card-top">
+                      <span className="sw-type-icon"><Icon size={20} /></span>
+                      <b className="sw-type-qcount">
+                        {card.id === 'all_rounder'
+                          ? t('All goals', 'सभी लक्ष्य')
+                          : t(`${card.questionCount} core questions`, `${card.questionCount} मुख्य सवाल`)}
+                      </b>
+                    </div>
+                    <h3>{language === 'hi' ? card.hiTitle : card.enTitle}</h3>
+                    <p>{language === 'hi' ? card.hiSub : card.enSub}</p>
+                    <div className="sw-type-foot">
+                      <span>{language === 'hi' ? card.hiSchemes : card.enSchemes}</span>
+                      <ArrowRight size={15} />
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+          </section>
+        )}
+
         {/* Profile Status Hero Banner */}
         <section className="sw-status-card" aria-label={t('Profile status overview', 'प्रोफ़ाइल स्थिति सारांश')}>
           <div className="sw-status-head">
             <div>
               <span className="fs-kicker">
-                <span /> {t('AUTOMATED SCHEME WORKFLOW', 'स्वचालित योजना वर्कफ़्लो')}
+                <span />{' '}
+                {activeTypeCard
+                  ? `${t('PROFILE TYPE', 'प्रोफ़ाइल प्रकार')}: ${(language === 'hi' ? activeTypeCard.hiTitle : activeTypeCard.enTitle).toUpperCase()}`
+                  : t('AUTOMATED SCHEME WORKFLOW', 'स्वचालित योजना वर्कफ़्लो')}
               </span>
               <h1>
                 {profile.full_name.trim()
                   ? t(`${profile.full_name.trim()}’s Scheme Profile`, `${profile.full_name.trim()} की योजना प्रोफ़ाइल`)
-                  : t('Your Citizen Profile & Scheme Hub', 'आपकी प्रोफ़ाइल और योजना केंद्र')}
+                  : activeTypeCard
+                    ? t(`${activeTypeCard.enTitle} Profile`, `${activeTypeCard.hiTitle} प्रोफ़ाइल`)
+                    : t('Your Citizen Profile & Scheme Hub', 'आपकी प्रोफ़ाइल और योजना केंद्र')}
               </h1>
               <p>
-                {t(
-                  'Fill your profile once — FormSaathi automatically checks your eligibility, tracks your readiness, saves your wishlist, and prepares pre-filled official application sheets.',
-                  'अपनी प्रोफ़ाइल एक बार भरें — FormSaathi स्वतः पात्रता जाँचता है, प्रोफ़ाइल स्थिति दिखाता है, विशलिस्ट सहेजता है और प्री-फ़िल्ड आवेदन शीट तैयार करता है।',
-                )}
+                {activeTypeCard
+                  ? t(
+                      `Tailored for ${activeTypeCard.enTitle} — answer only the questions for ${activeTypeCard.enSchemes} and unlock 1-click Assisted Apply.`,
+                      `${activeTypeCard.hiTitle} के लिए विशेष रूप से तैयार — केवल ${activeTypeCard.hiSchemes} के सवाल भरें और तुरंत पात्रता व आवेदन शीट पाएँ।`,
+                    )
+                  : t(
+                      'Choose your profile type above — FormSaathi asks only the questions that apply to you, checks eligibility, saves your wishlist, and prepares pre-filled official application sheets.',
+                      'ऊपर अपना प्रोफ़ाइल प्रकार चुनें — FormSaathi केवल आपसे जुड़े सवाल पूछता है, पात्रता जाँचता है, विशलिस्ट सहेजता है और प्री-फ़िल्ड आवेदन शीट तैयार करता है।',
+                    )}
               </p>
             </div>
 
             <div className="sw-meter-box">
               <div className="sw-meter-top">
-                <strong>{status ? `${status.completion_percent}%` : '—'}</strong>
-                <span className={`sw-level-badge ${status?.level ?? 'starter'}`}>
-                  {status?.level_label ?? t('Checking…', 'जाँच हो रही है…')}
+                <strong>{profile.profile_type === 'unset' ? '0%' : status ? `${status.completion_percent}%` : '—'}</strong>
+                <span className={`sw-level-badge ${profile.profile_type === 'unset' ? 'starter' : status?.level ?? 'starter'}`}>
+                  {profile.profile_type === 'unset'
+                    ? t('Select profile type first', 'पहले प्रोफ़ाइल प्रकार चुनें')
+                    : status?.level_label ?? t('Checking…', 'जाँच हो रही है…')}
                 </span>
               </div>
-              <div className="sw-progress-track" role="progressbar" aria-valuenow={status?.completion_percent ?? 0} aria-valuemin={0} aria-valuemax={100}>
-                <div className="sw-progress-fill" style={{ width: `${status?.completion_percent ?? 0}%` }} />
+              <div
+                className="sw-progress-track"
+                role="progressbar"
+                aria-valuenow={profile.profile_type === 'unset' ? 0 : status?.completion_percent ?? 0}
+                aria-valuemin={0}
+                aria-valuemax={100}
+              >
+                <div
+                  className="sw-progress-fill"
+                  style={{ width: `${profile.profile_type === 'unset' ? 0 : status?.completion_percent ?? 0}%` }}
+                />
               </div>
               <small>
-                {status
-                  ? t(
-                      `${status.filled_count} of ${status.total_count} profile answers completed`,
-                      `${status.total_count} में से ${status.filled_count} प्रोफ़ाइल विवरण पूरे`,
-                    )
-                  : t('Evaluating your profile…', 'प्रोफ़ाइल का मूल्यांकन हो रहा है…')}
+                {profile.profile_type === 'unset'
+                  ? t('Pick one of the 4 profile types above to begin', 'शुरू करने के लिए ऊपर से कोई एक प्रोफ़ाइल प्रकार चुनें')
+                  : status
+                    ? t(
+                        `${status.filled_count} of ${status.total_count} questions answered for your profile type`,
+                        `आपके प्रोफ़ाइल प्रकार के ${status.total_count} में से ${status.filled_count} सवाल पूरे`,
+                      )
+                    : t('Evaluating your profile…', 'प्रोफ़ाइल का मूल्यांकन हो रहा है…')}
               </small>
             </div>
           </div>
@@ -559,7 +738,7 @@ export default function SchemeWorkflow({ initialTab }: { initialTab: 'profile' |
                 <strong>
                   {status ? `${status.docs_ready_count} / ${status.docs_total_count}` : '0 / 0'} {t('Docs Ready', 'दस्तावेज़ तैयार')}
                 </strong>
-                <span>{t('Required certificates marked ready', 'आवश्यक प्रमाणपत्र तैयार चिह्नित')}</span>
+                <span>{t('Relevant certificates marked ready', 'संबंधित प्रमाणपत्र तैयार चिह्नित')}</span>
               </div>
             </div>
 
@@ -577,9 +756,9 @@ export default function SchemeWorkflow({ initialTab }: { initialTab: 'profile' |
             </button>
           </div>
 
-          {status && (status.missing_fields.length > 0 ? (
+          {profile.profile_type !== 'unset' && status && (status.missing_fields.length > 0 ? (
             <div className="sw-missing-bar">
-              <span>{t('Missing to complete your profile:', 'प्रोफ़ाइल पूरी करने के लिए बाकी:')}</span>
+              <span>{t('Remaining questions for your profile type:', 'आपके प्रोफ़ाइल प्रकार के बाकी सवाल:')}</span>
               <div className="sw-missing-chips">
                 {status.missing_fields.slice(0, 6).map(f => (
                   <button key={f.key} type="button" onClick={() => focusField(f.key)}>
@@ -630,483 +809,599 @@ export default function SchemeWorkflow({ initialTab }: { initialTab: 'profile' |
         </div>
 
         {tab === 'profile' ? (
-          <div className="sw-workspace">
-            {/* LEFT: Unified Profile Form */}
-            <section className="sw-form-panel" aria-labelledby="sw-profile-heading">
-              <div className="sw-panel-head">
-                <div>
-                  <h2 id="sw-profile-heading">{t('Profile Data & Eligibility Answers', 'प्रोफ़ाइल डेटा और पात्रता विवरण')}</h2>
-                  <small>{t('Auto-saved as you type. Changes update matches instantly.', 'बदलाव अपने आप सहेजे जाते हैं और योजनाएँ तुरंत अपडेट होती हैं।')}</small>
-                </div>
-                <div className="sw-sample-actions">
-                  <button
-                    type="button"
-                    className="sw-subtle-btn"
-                    onClick={() => {
-                      updateProfile(() => SAMPLE_PROFILE)
-                      toast.push(t('Loaded sample profile so you can test instant matching.', 'त्वरित परीक्षण के लिए उदाहरण प्रोफ़ाइल भरी गई।'), 'info')
-                    }}
-                  >
-                    {t('Fill sample', 'उदाहरण भरें')}
-                  </button>
-                  <button
-                    type="button"
-                    className="sw-subtle-btn"
-                    onClick={() => {
-                      updateProfile(() => EMPTY_SCHEME_PROFILE)
-                      toast.push(t('Cleared profile answers.', 'प्रोफ़ाइल रीसेट की गई।'), 'info')
-                    }}
-                  >
-                    <RotateCcw size={13} /> {t('Reset', 'रीसेट')}
-                  </button>
-                </div>
-              </div>
-
-              {/* Goal Toggles */}
-              <div className="sw-group">
-                <div className="sw-group-title">{t('1. Goals to match schemes for', '1. किन लक्ष्यों के लिए योजनाएँ खोजें')}</div>
-                <div className="sw-goal-toggles">
-                  {(['business', 'college', 'school'] as SchemeGoal[]).map(g => {
-                    const Icon = goalIcons[g]
-                    const active = profile.goals.includes(g)
-                    return (
-                      <button
-                        key={g}
-                        type="button"
-                        aria-pressed={active}
-                        className={active ? 'active' : ''}
-                        onClick={() => toggleGoal(g)}
-                      >
-                        <Icon size={16} /> {goalNames[g]}
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
-
-              {/* Applicant Details */}
-              <div className="sw-group">
-                <div className="sw-group-title">{t('2. Applicant Details (used for Assisted Apply)', '2. आवेदक विवरण (आवेदन फ़ॉर्म में भरने हेतु)')}</div>
-                <div className="sw-field-grid">
-                  <label className="sw-field" htmlFor="sw-field-full_name">
-                    <span>{t('Full Name', 'पूरा नाम')}</span>
-                    <input
-                      id="sw-field-full_name"
-                      type="text"
-                      maxLength={120}
-                      placeholder={t('e.g. Aarav Sharma', 'जैसे आरव शर्मा')}
-                      value={profile.full_name}
-                      onChange={e => updateProfile(p => ({ ...p, full_name: e.target.value }))}
-                    />
-                  </label>
-
-                  <label className="sw-field" htmlFor="sw-field-state">
-                    <span>{t('State / Union Territory', 'राज्य / केंद्र शासित प्रदेश')}</span>
-                    <select
-                      id="sw-field-state"
-                      value={profile.state}
-                      onChange={e => updateProfile(p => ({ ...p, state: e.target.value }))}
-                    >
-                      <option value="">{t('Select state…', 'राज्य चुनें…')}</option>
-                      {INDIAN_STATES.map(s => (
-                        <option key={s} value={s}>{s}</option>
-                      ))}
-                    </select>
-                  </label>
-                </div>
-
-                <div className="sw-field" id="sw-field-age-wrap">
-                  <label htmlFor="sw-field-age">{t('Age (in years)', 'उम्र (वर्षों में)')}</label>
-                  <NumberOrUnknownField
-                    id="sw-field-age"
-                    value={profile.age}
-                    min={1}
-                    max={120}
-                    placeholder={t('Enter age (1–120)', 'उम्र दर्ज करें')}
-                    presets={[[14, '14'], [18, '18'], [21, '21'], [28, '28']]}
-                    onChange={v => updateProfile(p => ({ ...p, age: v }))}
-                    lang={language}
-                  />
-                </div>
-
-                <div className="sw-field" id="sw-field-category">
-                  <span>{t('Social Category', 'सामाजिक श्रेणी')}</span>
-                  <div className="sw-pills" role="group">
-                    {([
-                      ['general', t('General', 'सामान्य')],
-                      ['obc', 'OBC'],
-                      ['sc', 'SC'],
-                      ['st', 'ST'],
-                      ['ews', 'EWS'],
-                      ['unknown', t('Not sure', 'पता नहीं')],
-                    ] as [SchemeCategory, string][]).map(([k, label]) => (
-                      <button
-                        key={k}
-                        type="button"
-                        className={profile.category === k ? 'active' : ''}
-                        aria-pressed={profile.category === k}
-                        onClick={() => updateProfile(p => ({ ...p, category: k }))}
-                      >
-                        {label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="sw-field">
-                  <label htmlFor="sw-field-income">{t('Annual Family Income (₹)', 'वार्षिक पारिवारिक आय (₹)')}</label>
-                  <NumberOrUnknownField
-                    id="sw-field-income"
-                    value={profile.income}
-                    min={0}
-                    max={100000000}
-                    placeholder={t('e.g. 320000', 'जैसे 320000')}
-                    presets={[
-                      [200000, '₹2L'],
-                      [350000, '₹3.5L'],
-                      [450000, '₹4.5L'],
-                      [600000, '₹6L'],
-                    ]}
-                    onChange={v => updateProfile(p => ({ ...p, income: v }))}
-                    lang={language}
-                  />
-                </div>
-              </div>
-
-              {/* College Section */}
-              {profile.goals.includes('college') && (
-                <div className="sw-group">
-                  <div className="sw-group-title">{t('College Scholarship Questions (PM-USP CSSS)', 'कॉलेज छात्रवृत्ति सवाल (PM-USP CSSS)')}</div>
-
-                  <div className="sw-field" id="sw-field-percentile">
-                    <span>{t('Above 80th percentile in Class 12 board & stream?', 'कक्षा 12 बोर्ड और संकाय में 80वें पर्सेंटाइल से ऊपर?')}</span>
-                    <YesNoPills value={profile.percentile} onChange={v => updateProfile(p => ({ ...p, percentile: v }))} lang={language} />
-                  </div>
-
-                  <div className="sw-field" id="sw-field-regular">
-                    <span>{t('Pursuing a regular degree course (not diploma or distance)?', 'नियमित डिग्री पाठ्यक्रम में हैं (डिप्लोमा या दूरस्थ नहीं)?')}</span>
-                    <YesNoPills value={profile.regular} onChange={v => updateProfile(p => ({ ...p, regular: v }))} lang={language} />
-                  </div>
-
-                  <div className="sw-field" id="sw-field-gap">
-                    <span>{t('Took a gap after Class 12 before starting degree?', 'कक्षा 12 के बाद डिग्री से पहले अंतराल लिया?')}</span>
-                    <YesNoPills value={profile.gap} onChange={v => updateProfile(p => ({ ...p, gap: v }))} lang={language} />
-                  </div>
-
-                  <div className="sw-field" id="sw-field-aid">
-                    <span>{t('Receiving another scholarship or fee reimbursement?', 'कोई अन्य छात्रवृत्ति या शुल्क प्रतिपूर्ति मिल रही है?')}</span>
-                    <YesNoPills value={profile.aid} onChange={v => updateProfile(p => ({ ...p, aid: v }))} lang={language} />
-                  </div>
-                </div>
-              )}
-
-              {/* School Section */}
-              {profile.goals.includes('school') && (
-                <div className="sw-group">
-                  <div className="sw-group-title">{t('School Scholarship Questions (NMMSS)', 'स्कूल छात्रवृत्ति सवाल (NMMSS)')}</div>
-
-                  <div className="sw-field">
-                    <label htmlFor="sw-field-grade">{t('Current Class (1–12)', 'वर्तमान कक्षा (1–12)')}</label>
-                    <NumberOrUnknownField
-                      id="sw-field-grade"
-                      value={profile.grade}
-                      min={1}
-                      max={12}
-                      placeholder={t('e.g. 8', 'जैसे 8')}
-                      presets={[[7, 'Class 7'], [8, 'Class 8'], [9, 'Class 9'], [10, 'Class 10']]}
-                      onChange={v => updateProfile(p => ({ ...p, grade: v }))}
-                      lang={language}
-                    />
-                  </div>
-
-                  <div className="sw-field" id="sw-field-school_type">
-                    <span>{t('Attend a government, government-aided or local body school?', 'सरकारी, सहायता प्राप्त या स्थानीय निकाय स्कूल में पढ़ते हैं?')}</span>
-                    <YesNoPills value={profile.school_type} onChange={v => updateProfile(p => ({ ...p, school_type: v }))} lang={language} />
-                  </div>
-
-                  <div className="sw-field" id="sw-field-marks">
-                    <span>{t('Scored at least 55% in Class 7 (50% for SC/ST)?', 'कक्षा 7 में कम से कम 55% अंक थे (SC/ST हेतु 50%)?')}</span>
-                    <YesNoPills value={profile.marks} onChange={v => updateProfile(p => ({ ...p, marks: v }))} lang={language} />
-                  </div>
-                </div>
-              )}
-
-              {/* Business Section */}
-              {profile.goals.includes('business') && (
-                <div className="sw-group">
-                  <div className="sw-group-title">{t('Business & Enterprise Questions (PMEGP & MUDRA)', 'व्यवसाय और ऋण सवाल (PMEGP और MUDRA)')}</div>
-
-                  <div className="sw-field" id="sw-field-stage">
-                    <span>{t('Is this a new or existing business?', 'यह नया व्यवसाय है या मौजूदा?')}</span>
-                    <div className="sw-pills" role="group">
-                      {([
-                        ['new', t('New business', 'नया व्यवसाय')],
-                        ['existing', t('Existing business', 'मौजूदा व्यवसाय')],
-                        ['unknown', t('Not sure', 'पता नहीं')],
-                      ] as [SchemeProfile['stage'], string][]).map(([k, label]) => (
-                        <button
-                          key={k}
-                          type="button"
-                          className={profile.stage === k ? 'active' : ''}
-                          aria-pressed={profile.stage === k}
-                          onClick={() => updateProfile(p => ({ ...p, stage: k }))}
-                        >
-                          {label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="sw-field" id="sw-field-sector">
-                    <span>{t('Business sector', 'व्यवसाय का प्रकार')}</span>
-                    <div className="sw-pills" role="group">
-                      {([
-                        ['manufacturing', t('Manufacturing', 'विनिर्माण')],
-                        ['service', t('Services', 'सेवाएँ')],
-                        ['trade', t('Trading', 'व्यापार')],
-                        ['other', t('Other', 'अन्य')],
-                        ['unknown', t('Not sure', 'पता नहीं')],
-                      ] as [SchemeProfile['sector'], string][]).map(([k, label]) => (
-                        <button
-                          key={k}
-                          type="button"
-                          className={profile.sector === k ? 'active' : ''}
-                          aria-pressed={profile.sector === k}
-                          onClick={() => updateProfile(p => ({ ...p, sector: k }))}
-                        >
-                          {label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="sw-field">
-                    <label htmlFor="sw-field-budget">{t('Total Project Cost in ₹', 'परियोजना की कुल लागत (₹)')}</label>
-                    <NumberOrUnknownField
-                      id="sw-field-budget"
-                      value={profile.budget}
-                      min={1}
-                      max={100000000}
-                      placeholder={t('e.g. 600000', 'जैसे 600000')}
-                      presets={[
-                        [300000, '₹3L'],
-                        [1000000, '₹10L'],
-                        [2000000, '₹20L'],
-                        [4000000, '₹40L'],
-                      ]}
-                      onChange={v => updateProfile(p => ({ ...p, budget: v }))}
-                      lang={language}
-                    />
-                  </div>
-
-                  <div className="sw-field">
-                    <label htmlFor="sw-field-loan">{t('Loan Amount Needed in ₹', 'आवश्यक ऋण राशि (₹)')}</label>
-                    <NumberOrUnknownField
-                      id="sw-field-loan"
-                      value={profile.loan}
-                      min={1}
-                      max={100000000}
-                      placeholder={t('e.g. 400000', 'जैसे 400000')}
-                      presets={[
-                        [50000, '₹50K (Shishu)'],
-                        [400000, '₹4L (Kishore)'],
-                        [900000, '₹9L (Tarun)'],
-                        [1500000, '₹15L (Tarun+)'],
-                      ]}
-                      onChange={v => updateProfile(p => ({ ...p, loan: v }))}
-                      lang={language}
-                    />
-                  </div>
-
-                  <div className="sw-field" id="sw-field-eighth">
-                    <span>{t('Have you passed Class 8?', 'क्या आपने कक्षा 8 पास की है?')}</span>
-                    <YesNoPills value={profile.eighth} onChange={v => updateProfile(p => ({ ...p, eighth: v }))} lang={language} />
-                  </div>
-
-                  <div className="sw-field" id="sw-field-subsidy">
-                    <span>{t('Has this unit already received a government subsidy?', 'क्या इस इकाई को पहले सरकारी सब्सिडी मिली है?')}</span>
-                    <YesNoPills value={profile.subsidy} onChange={v => updateProfile(p => ({ ...p, subsidy: v }))} lang={language} />
-                  </div>
-
-                  <div className="sw-field" id="sw-field-repaid">
-                    <span>{t('Successfully repaid a previous MUDRA Tarun loan? (for ₹10L–₹20L Tarun Plus)', 'क्या पिछला मुद्रा तरुण ऋण चुकाया है? (₹10L–₹20L तरुण प्लस हेतु)')}</span>
-                    <YesNoPills value={profile.repaid} onChange={v => updateProfile(p => ({ ...p, repaid: v }))} lang={language} />
-                  </div>
-                </div>
-              )}
-
-              {/* Document Readiness Checklist */}
-              <div className="sw-group">
-                <div className="sw-group-title">{t('Document Readiness Checklist', 'दस्तावेज़ उपलब्धता सूची')}</div>
-                <div className="sw-doc-list">
-                  {ALL_DOCS.map(dk => {
-                    const checked = profile.documents.includes(dk)
-                    const label = matchData?.doc_labels?.[dk] ?? dk
-                    return (
-                      <label key={dk} className={`sw-doc-item ${checked ? 'checked' : ''}`}>
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() => toggleDoc(dk)}
-                        />
-                        <span>{label}</span>
-                      </label>
-                    )
-                  })}
-                </div>
-              </div>
-            </section>
-
-            {/* RIGHT: Auto-Suggested Schemes */}
-            <section className="sw-results-panel" aria-labelledby="sw-matches-heading">
-              <div className="sw-panel-head">
-                <div>
-                  <h2 id="sw-matches-heading">
-                    {t('Suggested Schemes for You', 'आपके लिए सुझाई गई योजनाएँ')}
-                    {loading && <span className="sw-updating"> · {t('Updating…', 'अपडेट हो रहा है…')}</span>}
-                  </h2>
-                  <small>{t('Ranked automatically from your profile answers.', 'आपकी प्रोफ़ाइल के आधार पर क्रमबद्ध।')}</small>
-                </div>
-                {matchData?.report && (
-                  <button type="button" className="sw-subtle-btn" onClick={downloadReport}>
-                    <ArrowDownToLine size={14} /> {t('Report', 'रिपोर्ट')}
-                  </button>
+          profile.profile_type === 'unset' ? (
+            <div className="sw-empty-card">
+              <h3>{t('Choose your Profile Type above to view your questions', 'सवाल देखने के लिए ऊपर अपनी प्रोफ़ाइल का प्रकार चुनें')}</h3>
+              <p>
+                {t(
+                  'Pick School Student, College Student, Business / Entrepreneur, or Multi-Goal Family above — we will immediately load only the questions for your chosen type.',
+                  'ऊपर से स्कूली छात्र, कॉलेज छात्र, व्यवसायी / उद्यमी, या बहु-उद्देश्यीय प्रोफ़ाइल चुनें — हम तुरंत केवल आपके प्रकार के सवाल दिखाएँगे।',
                 )}
+              </p>
+              <div className="sw-quick-type-row">
+                {PROFILE_TYPE_CARDS.map(c => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    className="sw-wish-btn"
+                    onClick={() => selectProfileType(c.id)}
+                  >
+                    {language === 'hi' ? c.hiTitle : c.enTitle}
+                  </button>
+                ))}
               </div>
+            </div>
+          ) : (
+            <div className="sw-workspace">
+              {/* LEFT: Type-Scoped Profile Questions */}
+              <section className="sw-form-panel" aria-labelledby="sw-profile-heading">
+                <div className="sw-panel-head">
+                  <div>
+                    <h2 id="sw-profile-heading">
+                      {activeTypeCard
+                        ? t(`${activeTypeCard.enTitle} Questions`, `${activeTypeCard.hiTitle} के सवाल`)
+                        : t('Profile Questions', 'प्रोफ़ाइल सवाल')}
+                    </h2>
+                    <small>{t('Auto-saved locally & synced to Supabase when logged in.', 'बदलाव अपने आप सहेजे जाते हैं और लॉगिन पर Supabase में सिंक होते हैं।')}</small>
+                  </div>
+                  <div className="sw-sample-actions">
+                    <button
+                      type="button"
+                      className="sw-subtle-btn"
+                      onClick={() => setShowTypePicker(s => !s)}
+                    >
+                      <RefreshCw size={13} /> {t('Change Type', 'प्रकार बदलें')}
+                    </button>
+                    <button
+                      type="button"
+                      className="sw-subtle-btn"
+                      onClick={() => {
+                        const sampleKey: SelectableProfileType =
+                          profile.profile_type === 'unset' ? 'college_student' : profile.profile_type
+                        updateProfile(() => SAMPLE_PROFILES[sampleKey])
+                        toast.push(
+                          t('Filled sample answers for your selected profile type!', 'आपके चुने हुए प्रोफ़ाइल प्रकार का उदाहरण डेटा भरा गया!'),
+                          'info',
+                        )
+                      }}
+                    >
+                      {t('Fill sample', 'उदाहरण भरें')}
+                    </button>
+                    <button
+                      type="button"
+                      className="sw-subtle-btn"
+                      onClick={() => {
+                        updateProfile(prev => ({
+                          ...EMPTY_SCHEME_PROFILE,
+                          profile_type: prev.profile_type,
+                          goals: goalsForProfileType(prev.profile_type),
+                        }))
+                        toast.push(t('Cleared answers for this profile type.', 'इस प्रोफ़ाइल प्रकार के जवाब साफ़ किए गए।'), 'info')
+                      }}
+                    >
+                      <RotateCcw size={13} /> {t('Clear', 'साफ़ करें')}
+                    </button>
+                  </div>
+                </div>
 
-              <div className="sw-filter-row">
-                <button
-                  type="button"
-                  className={filter === 'all' ? 'active' : ''}
-                  onClick={() => setFilter('all')}
-                >
-                  {t('All Checked', 'सभी जाँची गईं')} ({allSchemes.length})
-                </button>
-                <button
-                  type="button"
-                  className={filter === 'matches' ? 'active' : ''}
-                  onClick={() => setFilter('matches')}
-                >
-                  {t('Matches & Near-Misses', 'मेल और नज़दीकी')} (
-                  {allSchemes.filter(s => s.status === 'match' || s.status === 'near_miss').length})
-                </button>
-                <button
-                  type="button"
-                  className={filter === 'wishlist' ? 'active' : ''}
-                  onClick={() => setFilter('wishlist')}
-                >
-                  {t('In Wishlist', 'विशलिस्ट में')} ({allSchemes.filter(s => Boolean(apps[s.id])).length})
-                </button>
-              </div>
+                {/* Quick Profile Type Switcher Pills */}
+                <div className="sw-group">
+                  <div className="sw-group-title">{t('Selected Profile Type', 'चुना गया प्रोफ़ाइल प्रकार')}</div>
+                  <div className="sw-goal-toggles">
+                    {PROFILE_TYPE_CARDS.map(c => {
+                      const Icon = c.icon
+                      const active = profile.profile_type === c.id
+                      return (
+                        <button
+                          key={c.id}
+                          type="button"
+                          aria-pressed={active}
+                          className={active ? 'active' : ''}
+                          onClick={() => selectProfileType(c.id)}
+                        >
+                          <Icon size={15} /> {language === 'hi' ? c.hiTitle : c.enTitle}
+                        </button>
+                      )
+                    })}
+                  </div>
 
-              {filteredSchemes.length === 0 ? (
-                <div className="sw-empty-card">
-                  <p>
-                    {filter === 'wishlist'
-                      ? t('No schemes from this view are in your wishlist yet. Click "Wishlist" on any scheme card to save it.', 'अभी इस दृश्य की कोई योजना विशलिस्ट में नहीं है।')
-                      : t('No profile matches yet — complete the highlighted missing fields on the left to see matching schemes.', 'अभी कोई सीधा मेल नहीं — बाईं ओर बाकी विवरण भरें।')}
-                  </p>
-                  {filter !== 'all' && (
-                    <button type="button" className="sw-subtle-btn" onClick={() => setFilter('all')}>
-                      {t('Show all checked schemes', 'सभी योजनाएँ दिखाएँ')}
+                  {profile.profile_type === 'all_rounder' && (
+                    <div className="sw-subgoal-box">
+                      <span>{t('Active categories in Multi-Goal mode:', 'बहु-उद्देश्यीय मोड में सक्रिय श्रेणियाँ:')}</span>
+                      <div className="sw-goal-toggles">
+                        {(['school', 'college', 'business'] as SchemeGoal[]).map(g => {
+                          const Icon = goalIcons[g]
+                          const active = profile.goals.includes(g)
+                          return (
+                            <button
+                              key={g}
+                              type="button"
+                              aria-pressed={active}
+                              className={active ? 'active' : ''}
+                              onClick={() => toggleGoal(g)}
+                            >
+                              <Icon size={15} /> {goalNames[g]}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Basic Applicant Details */}
+                <div className="sw-group">
+                  <div className="sw-group-title">
+                    {t('1. Basic Applicant Details (for Pre-filled Apply)', '1. बुनियादी आवेदक विवरण (आवेदन शीट हेतु)')}
+                  </div>
+                  <div className="sw-field-grid">
+                    <label className="sw-field" htmlFor="sw-field-full_name">
+                      <span>{t('Full Name', 'पूरा नाम')}</span>
+                      <input
+                        id="sw-field-full_name"
+                        type="text"
+                        maxLength={120}
+                        placeholder={t('e.g. Riya Verma', 'जैसे रिया वर्मा')}
+                        value={profile.full_name}
+                        onChange={e => updateProfile(p => ({ ...p, full_name: e.target.value }))}
+                      />
+                    </label>
+
+                    <label className="sw-field" htmlFor="sw-field-state">
+                      <span>{t('State / Union Territory', 'राज्य / केंद्र शासित प्रदेश')}</span>
+                      <select
+                        id="sw-field-state"
+                        value={profile.state}
+                        onChange={e => updateProfile(p => ({ ...p, state: e.target.value }))}
+                      >
+                        <option value="">{t('Select state…', 'राज्य चुनें…')}</option>
+                        {INDIAN_STATES.map(s => (
+                          <option key={s} value={s}>{s}</option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+
+                  {showAgeField && (
+                    <div className="sw-field" id="sw-field-age-wrap">
+                      <label htmlFor="sw-field-age">{t('Applicant Age (in years)', 'आवेदक की उम्र (वर्षों में)')}</label>
+                      <NumberOrUnknownField
+                        id="sw-field-age"
+                        value={profile.age}
+                        min={1}
+                        max={120}
+                        placeholder={t('Enter age (18+ for business schemes)', 'उम्र दर्ज करें (व्यवसाय हेतु 18+)')}
+                        presets={[[18, '18'], [22, '22'], [26, '26'], [32, '32']]}
+                        onChange={v => updateProfile(p => ({ ...p, age: v }))}
+                        lang={language}
+                      />
+                    </div>
+                  )}
+
+                  <div className="sw-field" id="sw-field-category">
+                    <span>{t('Social Category', 'सामाजिक श्रेणी')}</span>
+                    <div className="sw-pills" role="group">
+                      {([
+                        ['general', t('General', 'सामान्य')],
+                        ['obc', 'OBC'],
+                        ['sc', 'SC'],
+                        ['st', 'ST'],
+                        ['ews', 'EWS'],
+                        ['unknown', t('Not sure', 'पता नहीं')],
+                      ] as [SchemeCategory, string][]).map(([k, label]) => (
+                        <button
+                          key={k}
+                          type="button"
+                          className={profile.category === k ? 'active' : ''}
+                          aria-pressed={profile.category === k}
+                          onClick={() => updateProfile(p => ({ ...p, category: k }))}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {showIncomeField && (
+                    <div className="sw-field">
+                      <label htmlFor="sw-field-income">
+                        {activeGoals.includes('school') && !activeGoals.includes('college')
+                          ? t('Annual Parental Income (₹)', 'वार्षिक अभिभावक आय (₹)')
+                          : t('Annual Family Income (₹)', 'वार्षिक पारिवारिक आय (₹)')}
+                      </label>
+                      <NumberOrUnknownField
+                        id="sw-field-income"
+                        value={profile.income}
+                        min={0}
+                        max={100000000}
+                        placeholder={t('e.g. 300000', 'जैसे 300000')}
+                        presets={[
+                          [200000, '₹2L'],
+                          [320000, '₹3.2L'],
+                          [450000, '₹4.5L'],
+                          [600000, '₹6L'],
+                        ]}
+                        onChange={v => updateProfile(p => ({ ...p, income: v }))}
+                        lang={language}
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {/* School Student Questions ONLY */}
+                {activeGoals.includes('school') && (
+                  <div className="sw-group">
+                    <div className="sw-group-title">
+                      {t('2. School Student Questions (NMMSS)', '2. स्कूली छात्र पात्रता सवाल (NMMSS)')}
+                    </div>
+
+                    <div className="sw-field">
+                      <label htmlFor="sw-field-grade">{t('Which class are you studying in now? (1–12)', 'अभी आप किस कक्षा में पढ़ रहे हैं? (1–12)')}</label>
+                      <NumberOrUnknownField
+                        id="sw-field-grade"
+                        value={profile.grade}
+                        min={1}
+                        max={12}
+                        placeholder={t('e.g. 8', 'जैसे 8')}
+                        presets={[[7, 'Class 7'], [8, 'Class 8'], [9, 'Class 9'], [10, 'Class 10']]}
+                        onChange={v => updateProfile(p => ({ ...p, grade: v }))}
+                        lang={language}
+                      />
+                    </div>
+
+                    <div className="sw-field" id="sw-field-school_type">
+                      <span>{t('Do you attend a government, government-aided or local body school?', 'क्या आप सरकारी, सहायता प्राप्त या स्थानीय निकाय के स्कूल में पढ़ते हैं?')}</span>
+                      <YesNoPills value={profile.school_type} onChange={v => updateProfile(p => ({ ...p, school_type: v }))} lang={language} />
+                    </div>
+
+                    <div className="sw-field" id="sw-field-marks">
+                      <span>{t('Did you score at least 55% in Class 7 (50% for SC/ST)?', 'क्या कक्षा 7 में कम से कम 55% अंक थे (SC/ST के लिए 50%)?')}</span>
+                      <YesNoPills value={profile.marks} onChange={v => updateProfile(p => ({ ...p, marks: v }))} lang={language} />
+                    </div>
+                  </div>
+                )}
+
+                {/* College Student Questions ONLY */}
+                {activeGoals.includes('college') && (
+                  <div className="sw-group">
+                    <div className="sw-group-title">
+                      {t('2. College Student Questions (PM-USP CSSS)', '2. कॉलेज छात्र पात्रता सवाल (PM-USP CSSS)')}
+                    </div>
+
+                    <div className="sw-field" id="sw-field-percentile">
+                      <span>{t('Are you above the 80th percentile in your Class 12 board & stream?', 'क्या आप अपने कक्षा 12 बोर्ड और संकाय में 80वें पर्सेंटाइल से ऊपर हैं?')}</span>
+                      <YesNoPills value={profile.percentile} onChange={v => updateProfile(p => ({ ...p, percentile: v }))} lang={language} />
+                    </div>
+
+                    <div className="sw-field" id="sw-field-regular">
+                      <span>{t('Are you pursuing a regular degree course (not diploma or distance)?', 'क्या आप नियमित डिग्री पाठ्यक्रम में हैं (डिप्लोमा या दूरस्थ शिक्षा नहीं)?')}</span>
+                      <YesNoPills value={profile.regular} onChange={v => updateProfile(p => ({ ...p, regular: v }))} lang={language} />
+                    </div>
+
+                    <div className="sw-field" id="sw-field-gap">
+                      <span>{t('Did you take a gap year after Class 12 before starting your degree?', 'क्या कक्षा 12 के बाद डिग्री शुरू करने से पहले अंतराल लिया?')}</span>
+                      <YesNoPills value={profile.gap} onChange={v => updateProfile(p => ({ ...p, gap: v }))} lang={language} />
+                    </div>
+
+                    <div className="sw-field" id="sw-field-aid">
+                      <span>{t('Are you receiving any other scholarship or fee reimbursement?', 'क्या आपको कोई अन्य छात्रवृत्ति या शुल्क प्रतिपूर्ति मिल रही है?')}</span>
+                      <YesNoPills value={profile.aid} onChange={v => updateProfile(p => ({ ...p, aid: v }))} lang={language} />
+                    </div>
+
+                    {profile.profile_type === 'college_student' && (
+                      <div className="sw-career-tip">
+                        <GraduationCap size={16} />
+                        <span>
+                          {t('Also looking for internships or campus placements?', 'इंटर्नशिप या कैंपस प्लेसमेंट भी खोज रहे हैं?')}{' '}
+                          <a href="/?view=careers">{t('Open Career Portal →', 'करियर पोर्टल खोलें →')}</a>
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Business / Entrepreneur Questions ONLY */}
+                {activeGoals.includes('business') && (
+                  <div className="sw-group">
+                    <div className="sw-group-title">
+                      {t('2. Business / Entrepreneur Questions (PMEGP & MUDRA)', '2. व्यवसाय और उद्यमी सवाल (PMEGP और MUDRA)')}
+                    </div>
+
+                    <div className="sw-field" id="sw-field-stage">
+                      <span>{t('Is this a new or existing business?', 'यह नया व्यवसाय है या पहले से चल रहा है?')}</span>
+                      <div className="sw-pills" role="group">
+                        {([
+                          ['new', t('New business', 'नया व्यवसाय')],
+                          ['existing', t('Existing business', 'मौजूदा व्यवसाय')],
+                          ['unknown', t('Not sure', 'पता नहीं')],
+                        ] as [SchemeProfile['stage'], string][]).map(([k, label]) => (
+                          <button
+                            key={k}
+                            type="button"
+                            className={profile.stage === k ? 'active' : ''}
+                            aria-pressed={profile.stage === k}
+                            onClick={() => updateProfile(p => ({ ...p, stage: k }))}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="sw-field" id="sw-field-sector">
+                      <span>{t('What kind of business sector is it?', 'आपका व्यवसाय किस क्षेत्र का है?')}</span>
+                      <div className="sw-pills" role="group">
+                        {([
+                          ['manufacturing', t('Manufacturing', 'विनिर्माण')],
+                          ['service', t('Services', 'सेवाएँ')],
+                          ['trade', t('Trading', 'व्यापार')],
+                          ['other', t('Other', 'अन्य')],
+                          ['unknown', t('Not sure', 'पता नहीं')],
+                        ] as [SchemeProfile['sector'], string][]).map(([k, label]) => (
+                          <button
+                            key={k}
+                            type="button"
+                            className={profile.sector === k ? 'active' : ''}
+                            aria-pressed={profile.sector === k}
+                            onClick={() => updateProfile(p => ({ ...p, sector: k }))}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="sw-field">
+                      <label htmlFor="sw-field-budget">{t('Total Project Cost in ₹', 'परियोजना की कुल लागत (₹)')}</label>
+                      <NumberOrUnknownField
+                        id="sw-field-budget"
+                        value={profile.budget}
+                        min={1}
+                        max={100000000}
+                        placeholder={t('e.g. 800000', 'जैसे 800000')}
+                        presets={[
+                          [300000, '₹3L'],
+                          [1000000, '₹10L'],
+                          [2000000, '₹20L'],
+                          [4000000, '₹40L'],
+                        ]}
+                        onChange={v => updateProfile(p => ({ ...p, budget: v }))}
+                        lang={language}
+                      />
+                    </div>
+
+                    <div className="sw-field">
+                      <label htmlFor="sw-field-loan">{t('Loan Amount Needed in ₹', 'आवश्यक ऋण राशि (₹)')}</label>
+                      <NumberOrUnknownField
+                        id="sw-field-loan"
+                        value={profile.loan}
+                        min={1}
+                        max={100000000}
+                        placeholder={t('e.g. 450000', 'जैसे 450000')}
+                        presets={[
+                          [50000, '₹50K (Shishu)'],
+                          [400000, '₹4L (Kishore)'],
+                          [900000, '₹9L (Tarun)'],
+                          [1500000, '₹15L (Tarun+)'],
+                        ]}
+                        onChange={v => updateProfile(p => ({ ...p, loan: v }))}
+                        lang={language}
+                      />
+                    </div>
+
+                    {showEighthField && (
+                      <div className="sw-field" id="sw-field-eighth">
+                        <span>{t('Have you passed Class 8? (required above ₹10L manufacturing / ₹5L service)', 'क्या आपने कक्षा 8 पास की है? (बड़ी परियोजना हेतु आवश्यक)')}</span>
+                        <YesNoPills value={profile.eighth} onChange={v => updateProfile(p => ({ ...p, eighth: v }))} lang={language} />
+                      </div>
+                    )}
+
+                    <div className="sw-field" id="sw-field-subsidy">
+                      <span>{t('Has this unit already received a government subsidy?', 'क्या इस इकाई को पहले सरकारी सब्सिडी मिली है?')}</span>
+                      <YesNoPills value={profile.subsidy} onChange={v => updateProfile(p => ({ ...p, subsidy: v }))} lang={language} />
+                    </div>
+
+                    {showTarunPlusField && (
+                      <div className="sw-field" id="sw-field-repaid">
+                        <span>{t('Have you successfully repaid a previous MUDRA Tarun loan? (for ₹10L–₹20L Tarun Plus)', 'क्या पिछला मुद्रा तरुण ऋण सफलतापूर्वक चुकाया है? (₹10L–₹20L तरुण प्लस हेतु)')}</span>
+                        <YesNoPills value={profile.repaid} onChange={v => updateProfile(p => ({ ...p, repaid: v }))} lang={language} />
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Scoped Document Readiness Checklist */}
+                <div className="sw-group">
+                  <div className="sw-group-title">
+                    {t('3. Documents for Your Profile Type', '3. आपके प्रोफ़ाइल प्रकार के आवश्यक दस्तावेज़')}
+                  </div>
+                  <div className="sw-doc-list">
+                    {relevantDocs.map(dk => {
+                      const checked = profile.documents.includes(dk)
+                      const label = matchData?.doc_labels?.[dk] ?? dk
+                      return (
+                        <label key={dk} className={`sw-doc-item ${checked ? 'checked' : ''}`}>
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => toggleDoc(dk)}
+                          />
+                          <span>{label}</span>
+                        </label>
+                      )
+                    })}
+                  </div>
+                </div>
+              </section>
+
+              {/* RIGHT: Auto-Suggested Schemes for Selected Profile Type */}
+              <section className="sw-results-panel" aria-labelledby="sw-matches-heading">
+                <div className="sw-panel-head">
+                  <div>
+                    <h2 id="sw-matches-heading">
+                      {t('Suggested Schemes for Your Profile', 'आपकी प्रोफ़ाइल के लिए सुझाई गई योजनाएँ')}
+                      {loading && <span className="sw-updating"> · {t('Updating…', 'अपडेट हो रहा है…')}</span>}
+                    </h2>
+                    <small>
+                      {activeTypeCard
+                        ? t(
+                            `Showing schemes matched for ${activeTypeCard.enTitle}.`,
+                            `${activeTypeCard.hiTitle} के आधार पर स्वचालित सुझाव।`,
+                          )
+                        : t('Ranked automatically from your profile answers.', 'आपकी प्रोफ़ाइल के आधार पर क्रमबद्ध।')}
+                    </small>
+                  </div>
+                  {matchData?.report && (
+                    <button type="button" className="sw-subtle-btn" onClick={downloadReport}>
+                      <ArrowDownToLine size={14} /> {t('Report', 'रिपोर्ट')}
                     </button>
                   )}
                 </div>
-              ) : (
-                <div className="sw-scheme-list">
-                  {filteredSchemes.map((scheme, idx) => {
-                    const saved = apps[scheme.id]
-                    const readyDocs = scheme.required_documents.filter(d => d.ready).length
-                    const totalDocs = scheme.required_documents.length
-                    return (
-                      <article key={scheme.id} className="scheme-result sw-scheme-card">
-                        <div className="sw-card-badges">
-                          <span className={`scheme-badge ${scheme.status}`}>
-                            {idx + 1}. {matchData?.labels?.[scheme.status] ?? scheme.status}
-                          </span>
-                          <span className="sw-goal-chip">{goalNames[scheme.goal]}</span>
-                          {saved && (
-                            <span className={`sw-stage-pill ${STAGE_META[saved.stage].cls}`}>
-                              {STAGE_META[saved.stage][language]}
-                              {saved.applicationRef ? ` · #${saved.applicationRef}` : ''}
-                            </span>
-                          )}
-                        </div>
 
-                        <h3>{scheme.name}</h3>
-                        <p>{scheme.benefit}</p>
-
-                        <ul>
-                          {scheme.checks.map(c => (
-                            <li key={c.criterion}>
-                              <span aria-hidden="true">
-                                {c.status === 'pass' ? '✓' : c.status === 'fail' ? '✗' : '?'}
-                              </span>
-                              <div>
-                                <strong>
-                                  {c.status === 'pass'
-                                    ? t('Meets: ', 'पूरी: ')
-                                    : c.status === 'fail'
-                                      ? t('Required: ', 'ज़रूरी: ')
-                                      : t('Confirm: ', 'जाँचें: ')}
-                                </strong>
-                                {c.criterion}
-                              </div>
-                            </li>
-                          ))}
-                        </ul>
-
-                        <div className="sw-doc-readiness">
-                          <FileCheck2 size={15} />
-                          <span>
-                            {t(
-                              `Documents ready: ${readyDocs} of ${totalDocs}`,
-                              `दस्तावेज़ तैयार: ${totalDocs} में से ${readyDocs}`,
-                            )}
-                          </span>
-                          <small>· {scheme.portal_name}</small>
-                        </div>
-
-                        <p className="scheme-muted">{scheme.caveat}</p>
-
-                        <div className="sw-card-actions">
-                          <button
-                            type="button"
-                            className="sw-apply-btn"
-                            onClick={() => setApplyTargetId(scheme.id)}
-                          >
-                            <ClipboardCheck size={16} />
-                            {saved?.stage === 'applied' || saved?.stage === 'under_review' || saved?.stage === 'approved'
-                              ? t('View Application & Pre-fill', 'आवेदन स्थिति और शीट देखें')
-                              : t('Assisted Apply', 'सहायता-प्राप्त आवेदन')}
-                          </button>
-
-                          <button
-                            type="button"
-                            className={`sw-wish-btn ${saved ? 'saved' : ''}`}
-                            onClick={() => toggleWishlist(scheme)}
-                          >
-                            {saved ? <BookmarkCheck size={16} /> : <Bookmark size={16} />}
-                            {saved
-                              ? saved.stage === 'wishlist'
-                                ? t('Wishlisted', 'सहेजा गया')
-                                : STAGE_META[saved.stage][language]
-                              : t('Save to Wishlist', 'विशलिस्ट में जोड़ें')}
-                          </button>
-
-                          <a className="sw-ext-link" href={scheme.source} target="_blank" rel="noreferrer">
-                            {t('Official link', 'आधिकारिक लिंक')} <ExternalLink size={14} />
-                          </a>
-                        </div>
-                      </article>
-                    )
-                  })}
+                <div className="sw-filter-row">
+                  <button
+                    type="button"
+                    className={filter === 'all' ? 'active' : ''}
+                    onClick={() => setFilter('all')}
+                  >
+                    {t('All Checked', 'सभी जाँची गईं')} ({allSchemes.length})
+                  </button>
+                  <button
+                    type="button"
+                    className={filter === 'matches' ? 'active' : ''}
+                    onClick={() => setFilter('matches')}
+                  >
+                    {t('Matches & Near-Misses', 'मेल और नज़दीकी')} (
+                    {allSchemes.filter(s => s.status === 'match' || s.status === 'near_miss').length})
+                  </button>
+                  <button
+                    type="button"
+                    className={filter === 'wishlist' ? 'active' : ''}
+                    onClick={() => setFilter('wishlist')}
+                  >
+                    {t('In Wishlist', 'विशलिस्ट में')} ({allSchemes.filter(s => Boolean(apps[s.id])).length})
+                  </button>
                 </div>
-              )}
 
-              {matchData?.disclaimer && <p className="scheme-muted sw-disclaimer">{matchData.disclaimer}</p>}
-            </section>
-          </div>
+                {filteredSchemes.length === 0 ? (
+                  <div className="sw-empty-card">
+                    <p>
+                      {filter === 'wishlist'
+                        ? t('No schemes from this view are in your wishlist yet. Click "Save to Wishlist" on any scheme card to save it.', 'अभी इस दृश्य की कोई योजना विशलिस्ट में नहीं है।')
+                        : t('No profile matches yet — complete the remaining questions on the left to unlock matching schemes.', 'अभी कोई सीधा मेल नहीं — बाईं ओर बाकी सवाल भरें।')}
+                    </p>
+                    {filter !== 'all' && (
+                      <button type="button" className="sw-subtle-btn" onClick={() => setFilter('all')}>
+                        {t('Show all checked schemes', 'सभी योजनाएँ दिखाएँ')}
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="sw-scheme-list">
+                    {filteredSchemes.map((scheme, idx) => {
+                      const saved = apps[scheme.id]
+                      const readyDocs = scheme.required_documents.filter(d => d.ready).length
+                      const totalDocs = scheme.required_documents.length
+                      return (
+                        <article key={scheme.id} className="scheme-result sw-scheme-card">
+                          <div className="sw-card-badges">
+                            <span className={`scheme-badge ${scheme.status}`}>
+                              {idx + 1}. {matchData?.labels?.[scheme.status] ?? scheme.status}
+                            </span>
+                            <span className="sw-goal-chip">{goalNames[scheme.goal]}</span>
+                            {saved && (
+                              <span className={`sw-stage-pill ${STAGE_META[saved.stage].cls}`}>
+                                {STAGE_META[saved.stage][language]}
+                                {saved.applicationRef ? ` · #${saved.applicationRef}` : ''}
+                              </span>
+                            )}
+                          </div>
+
+                          <h3>{scheme.name}</h3>
+                          <p>{scheme.benefit}</p>
+
+                          <ul>
+                            {scheme.checks.map(c => (
+                              <li key={c.criterion}>
+                                <span aria-hidden="true">
+                                  {c.status === 'pass' ? '✓' : c.status === 'fail' ? '✗' : '?'}
+                                </span>
+                                <div>
+                                  <strong>
+                                    {c.status === 'pass'
+                                      ? t('Meets: ', 'पूरी: ')
+                                      : c.status === 'fail'
+                                        ? t('Required: ', 'ज़रूरी: ')
+                                        : t('Confirm: ', 'जाँचें: ')}
+                                  </strong>
+                                  {c.criterion}
+                                </div>
+                              </li>
+                            ))}
+                          </ul>
+
+                          <div className="sw-doc-readiness">
+                            <FileCheck2 size={15} />
+                            <span>
+                              {t(
+                                `Documents ready: ${readyDocs} of ${totalDocs}`,
+                                `दस्तावेज़ तैयार: ${totalDocs} में से ${readyDocs}`,
+                              )}
+                            </span>
+                            <small>· {scheme.portal_name}</small>
+                          </div>
+
+                          <p className="scheme-muted">{scheme.caveat}</p>
+
+                          <div className="sw-card-actions">
+                            <button
+                              type="button"
+                              className="sw-apply-btn"
+                              onClick={() => setApplyTargetId(scheme.id)}
+                            >
+                              <ClipboardCheck size={16} />
+                              {saved?.stage === 'applied' || saved?.stage === 'under_review' || saved?.stage === 'approved'
+                                ? t('View Application & Pre-fill', 'आवेदन स्थिति और शीट देखें')
+                                : t('Assisted Apply', 'सहायता-प्राप्त आवेदन')}
+                            </button>
+
+                            <button
+                              type="button"
+                              className={`sw-wish-btn ${saved ? 'saved' : ''}`}
+                              onClick={() => toggleWishlist(scheme)}
+                            >
+                              {saved ? <BookmarkCheck size={16} /> : <Bookmark size={16} />}
+                              {saved
+                                ? saved.stage === 'wishlist'
+                                  ? t('Wishlisted', 'सहेजा गया')
+                                  : STAGE_META[saved.stage][language]
+                                : t('Save to Wishlist', 'विशलिस्ट में जोड़ें')}
+                            </button>
+
+                            <a className="sw-ext-link" href={scheme.source} target="_blank" rel="noreferrer">
+                              {t('Official link', 'आधिकारिक लिंक')} <ExternalLink size={14} />
+                            </a>
+                          </div>
+                        </article>
+                      )
+                    })}
+                  </div>
+                )}
+
+                {profile.profile_type !== 'all_rounder' && (
+                  <div className="sw-check-other-bar">
+                    <Layers size={15} />
+                    <span>{t('Want to check other categories too?', 'क्या अन्य श्रेणियों की योजनाएँ भी देखना चाहते हैं?')}</span>
+                    <button type="button" className="sw-link-btn" onClick={() => setShowTypePicker(true)}>
+                      {t('Switch or expand Profile Type →', 'प्रोफ़ाइल प्रकार बदलें →')}
+                    </button>
+                  </div>
+                )}
+
+                {matchData?.disclaimer && <p className="scheme-muted sw-disclaimer">{matchData.disclaimer}</p>}
+              </section>
+            </div>
+          )
         ) : (
           /* WISHLIST & APPLICATION TRACKER TAB */
           <section className="sw-wishlist-panel" aria-labelledby="sw-wishlist-heading">
@@ -1283,13 +1578,7 @@ export default function SchemeWorkflow({ initialTab }: { initialTab: 'profile' |
         )}
       </main>
 
-      <footer className="fs-container fs-footer">
-        <strong>FormSaathi</strong>
-        <a href="/?view=careers">Career tools</a>
-        <span>
-          <Check size={15} /> {t('Preliminary checks & assisted prep — submit final forms on official portals.', 'प्रारंभिक जाँच व आवेदन सहायता — अंतिम फ़ॉर्म आधिकारिक पोर्टल पर जमा करें।')}
-        </span>
-      </footer>
+      <SchemeFooter language={language} />
 
       {/* 1-CLICK ASSISTED APPLY & STATUS MODAL */}
       {activeApplyScheme && (
@@ -1488,7 +1777,16 @@ export default function SchemeWorkflow({ initialTab }: { initialTab: 'profile' |
         </div>
       )}
 
-      {authOpen && <AuthModal onClose={() => setAuthOpen(false)} />}
+      {authModalMode && (
+        <SchemeAuthModal
+          initialMode={authModalMode}
+          language={language}
+          onClose={() => setAuthModalMode(null)}
+          onSuccess={(chosenType?: SelectableProfileType) => {
+            if (chosenType) selectProfileType(chosenType)
+          }}
+        />
+      )}
     </div>
   )
 }

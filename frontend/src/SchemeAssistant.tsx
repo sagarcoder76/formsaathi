@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { ArrowDownToLine, ArrowLeft, ArrowRight, Bookmark, BookmarkCheck, BookOpen, BriefcaseBusiness, Check, ClipboardCheck, GraduationCap, Languages, MessageCircle, RotateCcw, Send, ShieldCheck, Sparkles, UserCheck } from 'lucide-react'
-import { SchemeHeader } from './SchemeInfo'
+import { SchemeFooter, SchemeHeader } from './SchemeInfo'
 import { useAuth } from './lib/auth'
 import { useToast } from './components/Toast'
 import {
@@ -130,6 +130,6 @@ export default function SchemeAssistant() {
         const stage = data?.results ? 2 : answers.goal ? 1 : 0
         return <li key={title} aria-current={i === stage ? 'step' : undefined} className={i < stage ? 'done' : ''}><span>{i < stage ? <Check size={14}/> : `0${i+1}`}</span><div><strong>{title}</strong><p>{desc}</p></div></li>
       })}</ol><div className="scheme-private"><ShieldCheck size={20}/><div><strong>{t('No sign-in needed', 'लॉगिन की ज़रूरत नहीं')}</strong><p>{t('No name, Aadhaar or documents required.', 'नाम, आधार या दस्तावेज़ नहीं चाहिए।')}</p></div></div></aside></div>
-    </main><footer className="scheme-wrap scheme-footer"><span>FormSaathi</span><span><Check size={15}/>{t('Built for transparent scheme discovery', 'योजनाओं की पारदर्शी खोज के लिए')}</span></footer>
+    </main><SchemeFooter language={language}/>
   </div>
 }

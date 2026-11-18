@@ -1,6 +1,12 @@
 import { supabase } from './supabase'
 
 export type SchemeGoal = 'business' | 'college' | 'school'
+export type SchemeProfileType =
+  | 'school_student'
+  | 'college_student'
+  | 'entrepreneur'
+  | 'all_rounder'
+  | 'unset'
 export type YesNoUnknown = 'yes' | 'no' | 'unknown'
 export type SchemeCategory = 'general' | 'obc' | 'sc' | 'st' | 'ews' | 'unknown'
 export type SchemeDocKey =
@@ -21,6 +27,7 @@ export type SchemeAppStage =
   | 'rejected'
 
 export interface SchemeProfile {
+  profile_type: SchemeProfileType
   full_name: string
   state: string
   category: SchemeCategory
@@ -93,6 +100,8 @@ export interface MatchedScheme {
 }
 
 export interface SchemeProfileStatus {
+  profile_type: SchemeProfileType
+  profile_type_label: string
   completion_percent: number
   filled_count: number
   total_count: number
@@ -119,7 +128,53 @@ export const PROFILE_STORAGE_KEY = 'fs-scheme-profile-v1'
 export const APPS_STORAGE_KEY = 'fs-scheme-apps-v1'
 export const SCHEME_STORAGE_EVENT = 'fs-scheme-storage-change'
 
+export const VALID_PROFILE_TYPES: readonly SchemeProfileType[] = [
+  'school_student',
+  'college_student',
+  'entrepreneur',
+  'all_rounder',
+  'unset',
+]
+
+export function isValidProfileType(val: unknown): val is SchemeProfileType {
+  return typeof val === 'string' && (VALID_PROFILE_TYPES as readonly string[]).includes(val)
+}
+
+export function goalsForProfileType(
+  profileType: SchemeProfileType,
+  fallback: SchemeGoal[] = ['business', 'college', 'school'],
+): SchemeGoal[] {
+  if (profileType === 'school_student') return ['school']
+  if (profileType === 'college_student') return ['college']
+  if (profileType === 'entrepreneur') return ['business']
+  return fallback.length > 0 ? fallback : ['business', 'college', 'school']
+}
+
+export function docsForProfile(profile: SchemeProfile): SchemeDocKey[] {
+  const activeGoals = goalsForProfileType(profile.profile_type, profile.goals)
+  const docs = new Set<SchemeDocKey>(['identity_address', 'bank_passbook'])
+  const reserved = profile.category === 'obc' || profile.category === 'sc' || profile.category === 'st' || profile.category === 'ews'
+
+  if (activeGoals.includes('school') || activeGoals.includes('college')) {
+    docs.add('income_certificate')
+    docs.add('marksheets')
+    docs.add('bonafide_admission')
+  }
+  if (activeGoals.includes('business')) {
+    docs.add('business_plan')
+    const eighthCap = profile.sector === 'manufacturing' ? 1_000_000 : 500_000
+    if (typeof profile.budget === 'number' && profile.budget > eighthCap) {
+      docs.add('marksheets')
+    }
+  }
+  if (reserved) {
+    docs.add('category_certificate')
+  }
+  return Array.from(docs)
+}
+
 export const EMPTY_SCHEME_PROFILE: SchemeProfile = {
+  profile_type: 'unset',
   full_name: '',
   state: '',
   category: 'unknown',
@@ -143,9 +198,140 @@ export const EMPTY_SCHEME_PROFILE: SchemeProfile = {
   documents: [],
 }
 
+export const SAMPLE_PROFILES: Record<Exclude<SchemeProfileType, 'unset'>, SchemeProfile> = {
+  school_student: {
+    ...EMPTY_SCHEME_PROFILE,
+    profile_type: 'school_student',
+    full_name: 'Ananya Kumari',
+    state: 'Haryana',
+    category: 'sc',
+    goals: ['school'],
+    grade: 8,
+    income: 220000,
+    school_type: 'yes',
+    marks: 'yes',
+    documents: [
+      'identity_address',
+      'bank_passbook',
+      'income_certificate',
+      'marksheets',
+      'bonafide_admission',
+      'category_certificate',
+    ],
+  },
+  college_student: {
+    ...EMPTY_SCHEME_PROFILE,
+    profile_type: 'college_student',
+    full_name: 'Riya Verma',
+    state: 'Haryana',
+    category: 'obc',
+    goals: ['college'],
+    age: 19,
+    income: 310000,
+    percentile: 'yes',
+    regular: 'yes',
+    gap: 'no',
+    aid: 'no',
+    documents: [
+      'identity_address',
+      'bank_passbook',
+      'income_certificate',
+      'marksheets',
+      'bonafide_admission',
+      'category_certificate',
+    ],
+  },
+  entrepreneur: {
+    ...EMPTY_SCHEME_PROFILE,
+    profile_type: 'entrepreneur',
+    full_name: 'Aarav Sharma',
+    state: 'Haryana',
+    category: 'general',
+    goals: ['business'],
+    age: 26,
+    stage: 'new',
+    sector: 'manufacturing',
+    budget: 1200000,
+    loan: 450000,
+    eighth: 'yes',
+    subsidy: 'no',
+    repaid: 'no',
+    documents: ['identity_address', 'bank_passbook', 'business_plan', 'marksheets'],
+  },
+  all_rounder: {
+    ...EMPTY_SCHEME_PROFILE,
+    profile_type: 'all_rounder',
+    full_name: 'Aarav Sharma',
+    state: 'Haryana',
+    category: 'obc',
+    goals: ['college', 'business', 'school'],
+    age: 20,
+    income: 320000,
+    stage: 'new',
+    sector: 'service',
+    budget: 600000,
+    loan: 400000,
+    repaid: 'no',
+    eighth: 'yes',
+    subsidy: 'no',
+    percentile: 'yes',
+    regular: 'yes',
+    gap: 'no',
+    aid: 'no',
+    grade: 8,
+    school_type: 'yes',
+    marks: 'yes',
+    documents: [
+      'identity_address',
+      'bank_passbook',
+      'income_certificate',
+      'marksheets',
+      'bonafide_admission',
+      'business_plan',
+      'category_certificate',
+    ],
+  },
+}
+
 function notifyChange() {
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new Event(SCHEME_STORAGE_EVENT))
+  }
+}
+
+function inferLegacyProfileType(parsed: Partial<SchemeProfile>, goals: SchemeGoal[]): SchemeProfileType {
+  if (isValidProfileType(parsed.profile_type)) return parsed.profile_type
+  const hasAnyAnswer = Boolean(
+    parsed.full_name?.trim() ||
+    parsed.state?.trim() ||
+    (parsed.category && parsed.category !== 'unknown') ||
+    (parsed.age && parsed.age !== 'unknown') ||
+    (parsed.income && parsed.income !== 'unknown') ||
+    (parsed.stage && parsed.stage !== 'unknown') ||
+    (parsed.percentile && parsed.percentile !== 'unknown') ||
+    (parsed.grade && parsed.grade !== 'unknown'),
+  )
+  if (!hasAnyAnswer) return 'unset'
+  if (goals.length === 1) {
+    if (goals[0] === 'school') return 'school_student'
+    if (goals[0] === 'college') return 'college_student'
+    if (goals[0] === 'business') return 'entrepreneur'
+  }
+  return 'all_rounder'
+}
+
+export function normalizeSchemeProfile(parsed: Partial<SchemeProfile>): SchemeProfile {
+  const cleanGoals = Array.isArray(parsed.goals) && parsed.goals.length > 0
+    ? (parsed.goals.filter(g => g === 'business' || g === 'college' || g === 'school') as SchemeGoal[])
+    : EMPTY_SCHEME_PROFILE.goals
+  const profileType = inferLegacyProfileType(parsed, cleanGoals)
+  const resolvedGoals = goalsForProfileType(profileType, cleanGoals)
+  return {
+    ...EMPTY_SCHEME_PROFILE,
+    ...parsed,
+    profile_type: profileType,
+    goals: resolvedGoals,
+    documents: Array.isArray(parsed.documents) ? parsed.documents : [],
   }
 }
 
@@ -154,14 +340,7 @@ export function loadLocalSchemeProfile(): SchemeProfile {
     const raw = localStorage.getItem(PROFILE_STORAGE_KEY)
     if (!raw) return EMPTY_SCHEME_PROFILE
     const parsed = JSON.parse(raw) as Partial<SchemeProfile>
-    return {
-      ...EMPTY_SCHEME_PROFILE,
-      ...parsed,
-      goals: Array.isArray(parsed.goals) && parsed.goals.length > 0
-        ? (parsed.goals.filter(g => g === 'business' || g === 'college' || g === 'school') as SchemeGoal[])
-        : EMPTY_SCHEME_PROFILE.goals,
-      documents: Array.isArray(parsed.documents) ? parsed.documents : [],
-    }
+    return normalizeSchemeProfile(parsed)
   } catch {
     return EMPTY_SCHEME_PROFILE
   }
@@ -198,6 +377,7 @@ export function saveLocalSchemeApps(apps: Record<string, SchemeApplicationEntry>
 
 export function isProfilePopulated(p: SchemeProfile): boolean {
   return Boolean(
+    p.profile_type !== 'unset' ||
     p.full_name.trim() ||
     p.state.trim() ||
     p.category !== 'unknown' ||
@@ -214,7 +394,7 @@ export function isProfilePopulated(p: SchemeProfile): boolean {
     p.grade !== 'unknown' ||
     p.school_type !== 'unknown' ||
     p.marks !== 'unknown' ||
-    p.documents.length > 0
+    p.documents.length > 0,
   )
 }
 
@@ -225,13 +405,31 @@ export function mergeInterviewAnswersIntoProfile(
   const next: SchemeProfile = { ...current }
   const goal = answers.goal
   if (goal === 'business' || goal === 'college' || goal === 'school') {
-    next.goals = Array.from(new Set<SchemeGoal>([goal, ...current.goals]))
+    if (next.profile_type === 'unset') {
+      next.profile_type =
+        goal === 'school'
+          ? 'school_student'
+          : goal === 'college'
+            ? 'college_student'
+            : 'entrepreneur'
+      next.goals = [goal]
+    } else if (next.profile_type === 'all_rounder') {
+      next.goals = Array.from(new Set<SchemeGoal>([goal, ...current.goals]))
+    } else {
+      const mapped = goalsForProfileType(next.profile_type, [goal])
+      if (!mapped.includes(goal)) {
+        next.profile_type = 'all_rounder'
+        next.goals = Array.from(new Set<SchemeGoal>([goal, ...mapped]))
+      }
+    }
   }
   const intField = (k: 'age' | 'income' | 'budget' | 'loan' | 'grade') => {
     const v = answers[k]
     if (typeof v === 'number') next[k] = v
   }
-  const ynField = (k: 'repaid' | 'eighth' | 'subsidy' | 'percentile' | 'regular' | 'gap' | 'aid' | 'school_type' | 'marks') => {
+  const ynField = (
+    k: 'repaid' | 'eighth' | 'subsidy' | 'percentile' | 'regular' | 'gap' | 'aid' | 'school_type' | 'marks',
+  ) => {
     const v = answers[k]
     if (v === 'yes' || v === 'no') next[k] = v
   }
@@ -250,18 +448,25 @@ export function mergeInterviewAnswersIntoProfile(
   ynField('school_type')
   ynField('marks')
   if (answers.stage === 'new' || answers.stage === 'existing') next.stage = answers.stage
-  if (answers.sector === 'manufacturing' || answers.sector === 'service' || answers.sector === 'trade' || answers.sector === 'other') {
+  if (
+    answers.sector === 'manufacturing' ||
+    answers.sector === 'service' ||
+    answers.sector === 'trade' ||
+    answers.sector === 'other'
+  ) {
     next.sector = answers.sector
   }
   return next
 }
 
-// ---------- Best-effort Supabase Cloud Sync ----------
+// ---------- Supabase Cloud Sync ----------
 
 export async function pushCloudSchemeProfile(uid: string, profile: SchemeProfile): Promise<void> {
   if (!supabase) return
   const { error } = await supabase.from('scheme_profiles').upsert({
     user_id: uid,
+    profile_type: profile.profile_type,
+    full_name: profile.full_name.trim(),
     profile_data: profile,
     updated_at: new Date().toISOString(),
   })
@@ -272,19 +477,22 @@ export async function pullCloudSchemeProfile(uid: string): Promise<SchemeProfile
   if (!supabase) return null
   const { data, error } = await supabase
     .from('scheme_profiles')
-    .select('profile_data')
+    .select('profile_type,full_name,profile_data')
     .eq('user_id', uid)
     .maybeSingle()
-  if (error || !data?.profile_data) return null
-  const cloud = data.profile_data as Partial<SchemeProfile>
-  return {
-    ...EMPTY_SCHEME_PROFILE,
+  if (error || !data) return null
+  const cloud = (data.profile_data && typeof data.profile_data === 'object' ? data.profile_data : {}) as Partial<SchemeProfile>
+  const rowType = isValidProfileType(data.profile_type) && data.profile_type !== 'unset'
+    ? data.profile_type
+    : cloud.profile_type
+  const rowName = typeof data.full_name === 'string' && data.full_name.trim()
+    ? data.full_name.trim()
+    : cloud.full_name
+  return normalizeSchemeProfile({
     ...cloud,
-    goals: Array.isArray(cloud.goals) && cloud.goals.length > 0
-      ? (cloud.goals.filter(g => g === 'business' || g === 'college' || g === 'school') as SchemeGoal[])
-      : EMPTY_SCHEME_PROFILE.goals,
-    documents: Array.isArray(cloud.documents) ? cloud.documents : [],
-  }
+    ...(rowType ? { profile_type: rowType } : {}),
+    ...(rowName ? { full_name: rowName } : {}),
+  })
 }
 
 export async function upsertCloudSchemeApp(uid: string, entry: SchemeApplicationEntry): Promise<void> {
