@@ -225,8 +225,23 @@ def intake(req: Intake, response: Response):
 
 
 GoalKey = Literal['business', 'college', 'school']
+ProfileTypeKey = Literal['school_student', 'college_student', 'entrepreneur', 'all_rounder', 'unset']
 YesNoUnknown = Literal['yes', 'no', 'unknown']
 CategoryKey = Literal['general', 'obc', 'sc', 'st', 'ews', 'unknown']
+
+PROFILE_TYPE_GOALS: dict[str, list[GoalKey]] = {
+    'school_student': ['school'],
+    'college_student': ['college'],
+    'entrepreneur': ['business'],
+}
+
+PROFILE_TYPE_LABELS: dict[str, dict[str, str]] = {
+    'school_student': text('School Student (Class 1–12)', 'स्कूली छात्र (कक्षा 1–12)'),
+    'college_student': text('College / University Student', 'कॉलेज / विश्वविद्यालय छात्र'),
+    'entrepreneur': text('Business / Entrepreneur', 'व्यवसायी / उद्यमी'),
+    'all_rounder': text('Multi-Goal / Family Profile', 'बहु-उद्देश्यीय / परिवार प्रोफ़ाइल'),
+    'unset': text('Profile type not chosen yet', 'प्रोफ़ाइल प्रकार अभी नहीं चुना गया'),
+}
 DocKey = Literal[
     'identity_address',
     'bank_passbook',
@@ -295,6 +310,7 @@ def format_inr(amount: int) -> str:
 
 class SchemeProfileData(BaseModel):
     model_config = ConfigDict(extra='forbid')
+    profile_type: ProfileTypeKey = 'unset'
     full_name: StrictStr = Field(default='', max_length=120)
     state: StrictStr = Field(default='', max_length=80)
     category: CategoryKey = UNKNOWN
@@ -352,7 +368,10 @@ def _yes_no_label(val: str):
 
 
 def _evaluate_profile_schemes(p: SchemeProfileData):
-    active_goals: list[GoalKey] = list(dict.fromkeys(p.goals)) or ['business', 'college', 'school']
+    if p.profile_type in PROFILE_TYPE_GOALS:
+        active_goals: list[GoalKey] = list(PROFILE_TYPE_GOALS[p.profile_type])
+    else:
+        active_goals = list(dict.fromkeys(p.goals)) or ['business', 'college', 'school']
     a = p.model_dump()
     docs_set = set(p.documents)
     has_reserved_cat = p.category in ('sc', 'st', 'obc', 'ews')
@@ -642,6 +661,8 @@ def _evaluate_profile_schemes(p: SchemeProfileData):
     }
 
     status_summary = {
+        'profile_type': p.profile_type,
+        'profile_type_label': PROFILE_TYPE_LABELS[p.profile_type],
         'completion_percent': completion,
         'filled_count': filled_count,
         'total_count': total_count,

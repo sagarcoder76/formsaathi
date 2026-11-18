@@ -124,3 +124,36 @@ def test_profile_match_hindi_and_validation():
 
     bad = client.post('/api/schemes/profile-match', json={'profile': {'age': 200}})
     assert bad.status_code == 422
+
+
+def test_profile_type_scopes_questions_and_schemes():
+    college = client.post('/api/schemes/profile-match', json={
+        'language': 'en',
+        'profile': {
+            'profile_type': 'college_student',
+            'full_name': 'Riya Verma',
+            'state': 'Haryana',
+            'category': 'general',
+            'goals': ['business', 'college', 'school'],  # overridden by specific profile_type
+            'income': 300_000,
+            'percentile': 'yes',
+            'regular': 'yes',
+            'gap': 'no',
+            'aid': 'no',
+        },
+    }).json()
+    assert college['profile_status']['profile_type'] == 'college_student'
+    assert college['profile_status']['active_goals'] == ['college']
+    assert college['profile_status']['completion_percent'] == 100
+    assert [r['id'] for r in college['results']] == ['csss']
+
+    entrepreneur = client.post('/api/schemes/profile-match', json={
+        'language': 'en',
+        'profile': {'profile_type': 'entrepreneur'},
+    }).json()
+    assert entrepreneur['profile_status']['active_goals'] == ['business']
+    assert {r['id'] for r in entrepreneur['results']} == {'pmegp', 'mudra'}
+    missing_keys = {m['key'] for m in entrepreneur['profile_status']['missing_fields']}
+    assert 'percentile' not in missing_keys and 'grade' not in missing_keys
+    assert {'age', 'stage', 'sector', 'budget', 'loan', 'subsidy'}.issubset(missing_keys)
+
