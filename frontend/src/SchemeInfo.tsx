@@ -1,16 +1,48 @@
+import { useEffect, useState } from 'react'
 import { ArrowRight, ExternalLink, Landmark } from 'lucide-react'
+import { SCHEME_STORAGE_EVENT, loadLocalSchemeApps } from './lib/schemeStore'
 import './schemes.css'
 
-const links: [string, string, string][] = [
+export type SchemeNavId = 'home' | 'profile' | 'wishlist' | 'guide' | 'help' | 'contact'
+
+const links: [SchemeNavId, string, string][] = [
   ['home', 'Home page', '/'],
+  ['profile', 'My Profile', '/?view=profile'],
+  ['wishlist', 'Wishlist', '/?view=wishlist'],
   ['guide', 'Step-by-step guide', '/?view=guide'],
   ['help', 'Help', '/?view=help'],
   ['contact', 'Contact us', '/?view=contact'],
 ]
 const assistant = '/?view=assistant'
 
-export function SchemeHeader({ active = 'home' }: { active?: 'home' | 'guide' | 'help' | 'contact' }) {
-  return <header className="fs-top"><div className="fs-container fs-nav"><a className="fs-brand" href="/"><span><Landmark size={19}/></span>FormSaathi</a><nav aria-label="Main navigation">{links.map(([view, label, href]) => <a key={view} href={href} aria-current={active === view ? 'page' : undefined}>{label}</a>)}</nav></div></header>
+export function SchemeHeader({ active = 'home' }: { active?: SchemeNavId | 'assistant' }) {
+  const [savedCount, setSavedCount] = useState(() => Object.keys(loadLocalSchemeApps()).length)
+
+  useEffect(() => {
+    const refresh = () => setSavedCount(Object.keys(loadLocalSchemeApps()).length)
+    window.addEventListener(SCHEME_STORAGE_EVENT, refresh)
+    window.addEventListener('storage', refresh)
+    return () => {
+      window.removeEventListener(SCHEME_STORAGE_EVENT, refresh)
+      window.removeEventListener('storage', refresh)
+    }
+  }, [])
+
+  return (
+    <header className="fs-top">
+      <div className="fs-container fs-nav">
+        <a className="fs-brand" href="/"><span><Landmark size={19}/></span>FormSaathi</a>
+        <nav aria-label="Main navigation">
+          {links.map(([view, label, href]) => (
+            <a key={view} href={href} aria-current={active === view ? 'page' : undefined}>
+              {label}
+              {view === 'wishlist' && savedCount > 0 && <b className="fs-nav-badge">{savedCount}</b>}
+            </a>
+          ))}
+        </nav>
+      </div>
+    </header>
+  )
 }
 
 const steps = [

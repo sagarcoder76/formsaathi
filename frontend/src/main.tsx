@@ -14,6 +14,7 @@ import App from './App.tsx'
 import SchemeInfo from './SchemeInfo.tsx'
 import SchemeHome from './SchemeHome.tsx'
 import SchemeAssistant from './SchemeAssistant.tsx'
+import SchemeWorkflow from './SchemeWorkflow.tsx'
 import { AuthProvider } from './lib/auth.tsx'
 import { ToastProvider } from './components/Toast.tsx'
 import ErrorBoundary from './components/ErrorBoundary.tsx'
@@ -29,7 +30,17 @@ createRoot(document.getElementById('root')!).render(
       <MotionConfig reducedMotion="user">
         <AuthProvider>
           <ToastProvider>
-            {careers ? <App /> : view === "assistant" ? <SchemeAssistant /> : view === "help" || view === "contact" || view === "guide" ? <SchemeInfo view={view} /> : <SchemeHome />}
+            {careers ? (
+              <App />
+            ) : view === "assistant" ? (
+              <SchemeAssistant />
+            ) : view === "profile" || view === "wishlist" ? (
+              <SchemeWorkflow initialTab={view} />
+            ) : view === "help" || view === "contact" || view === "guide" ? (
+              <SchemeInfo view={view} />
+            ) : (
+              <SchemeHome />
+            )}
           </ToastProvider>
         </AuthProvider>
       </MotionConfig>
