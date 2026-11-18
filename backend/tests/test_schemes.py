@@ -70,3 +70,57 @@ def test_ai_failure_does_not_change_decision(monkeypatch):
     a = dict(goal='school', grade=8, income=350_000, school_type='yes', marks='yes')
     r = step(a, explain=True)
     assert r['ai_failed'] and r['results'] == step(a)['results']
+
+
+def test_profile_match_multi_goal_status_and_prefill():
+    empty = client.post('/api/schemes/profile-match', json={'language': 'en', 'profile': {}}).json()
+    assert empty['profile_status']['completion_percent'] == 0
+    assert empty['profile_status']['level'] == 'starter'
+    assert {r['id'] for r in empty['results']} == {'pmegp', 'mudra', 'csss', 'nmmss'}
+
+    ready = client.post('/api/schemes/profile-match', json={
+        'language': 'en',
+        'profile': {
+            'full_name': 'Aarav Sharma',
+            'state': 'Haryana',
+            'category': 'obc',
+            'goals': ['college', 'business'],
+            'age': 21,
+            'income': 320_000,
+            'percentile': 'yes',
+            'regular': 'yes',
+            'gap': 'no',
+            'aid': 'no',
+            'stage': 'new',
+            'sector': 'service',
+            'budget': 800_000,
+            'loan': 400_000,
+            'eighth': 'yes',
+            'subsidy': 'no',
+            'documents': ['identity_address', 'bank_passbook', 'income_certificate', 'marksheets', 'bonafide_admission', 'business_plan', 'category_certificate'],
+        },
+    })
+    assert ready.status_code == 200
+    body = ready.json()
+    assert body['profile_status']['completion_percent'] == 100
+    assert body['profile_status']['level'] == 'ready'
+    assert body['profile_status']['missing_fields'] == []
+    assert body['profile_status']['match_counts']['match'] == 3
+    csss = next(r for r in body['results'] if r['id'] == 'csss')
+    assert csss['status'] == 'match'
+    assert all(d['ready'] for d in csss['required_documents'])
+    income_field = next(f for f in csss['prefill_fields'] if f['key'] == 'income')
+    assert income_field['value'] == '₹3,20,000' and income_field['ready'] is True
+
+
+def test_profile_match_hindi_and_validation():
+    hi = client.post('/api/schemes/profile-match', json={
+        'language': 'hi',
+        'profile': {'goals': ['school'], 'grade': 8, 'income': 250_000, 'school_type': 'yes', 'marks': 'yes'},
+    }).json()
+    assert hi['results'][0]['id'] == 'nmmss'
+    assert hi['results'][0]['status'] == 'match'
+    assert 'योजना रिपोर्ट' in hi['report']
+
+    bad = client.post('/api/schemes/profile-match', json={'profile': {'age': 200}})
+    assert bad.status_code == 422
