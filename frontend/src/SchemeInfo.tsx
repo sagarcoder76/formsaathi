@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import {
   ArrowRight, BookOpen, BriefcaseBusiness, Check, Cloud, ExternalLink,
-  GraduationCap, Landmark, Layers, LogIn, LogOut, MessageCircle, UserCheck, UserPlus,
+  GraduationCap, Landmark, Layers, LogIn, LogOut, MessageCircle, Moon, Sun, UserCheck, UserPlus,
 } from 'lucide-react'
 import { useAuth } from './lib/auth'
+import { useTheme } from './lib/theme'
 import SchemeAuthModal, { SchemeAuthCard } from './SchemeAuthModal'
 import type { SelectableProfileType } from './lib/profileTypes'
 import { SCHEME_STORAGE_EVENT, loadLocalSchemeApps, loadLocalSchemeProfile } from './lib/schemeStore'
@@ -23,6 +24,7 @@ const assistant = '/?view=assistant'
 
 export function SchemeHeader({ active = 'home' }: { active?: SchemeNavId | 'assistant' }) {
   const { enabled: authEnabled, session, userEmail, userName, signOut } = useAuth()
+  const { dark, toggleTheme } = useTheme()
   const [savedCount, setSavedCount] = useState(() => Object.keys(loadLocalSchemeApps()).length)
   const [authModalMode, setAuthModalMode] = useState<'login' | 'signup' | null>(null)
 
@@ -57,6 +59,17 @@ export function SchemeHeader({ active = 'home' }: { active?: SchemeNavId | 'assi
           </nav>
 
           <div className="fs-nav-auth">
+            <button
+              type="button"
+              className="fs-theme-btn"
+              onClick={toggleTheme}
+              aria-label={dark ? 'Switch to light mode' : 'Switch to dark mode'}
+              title={dark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+            >
+              {dark ? <Sun size={15} /> : <Moon size={15} />}
+              <span>{dark ? 'Light' : 'Dark'}</span>
+            </button>
+
             {session ? (
               <>
                 <a className="fs-user-pill" href="/?view=profile" title={userEmail ?? undefined}>
@@ -120,6 +133,7 @@ export function SchemeHeader({ active = 'home' }: { active?: SchemeNavId | 'assi
 
 export function SchemeFooter({ language = 'en' }: { language?: 'en' | 'hi' }) {
   const { enabled: authEnabled, session, userEmail } = useAuth()
+  const { dark, toggleTheme } = useTheme()
   const [authModalMode, setAuthModalMode] = useState<'login' | 'signup' | null>(null)
   const t = (en: string, hi: string) => (language === 'hi' ? hi : en)
 
@@ -167,6 +181,14 @@ export function SchemeFooter({ language = 'en' }: { language?: 'en' | 'hi' }) {
                     <UserCheck size={14} /> {t('Open My Profile', 'मेरी प्रोफ़ाइल खोलें')}
                   </a>
                 )}
+                <button
+                  type="button"
+                  className="fs-footer-auth-btn"
+                  onClick={toggleTheme}
+                >
+                  {dark ? <Sun size={14} /> : <Moon size={14} />}
+                  {dark ? t('Light Mode', 'लाइट मोड') : t('Dark Mode', 'डार्क मोड')}
+                </button>
               </div>
             </div>
 

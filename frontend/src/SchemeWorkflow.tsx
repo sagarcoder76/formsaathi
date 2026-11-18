@@ -3,11 +3,16 @@ import {
   ArrowDownToLine, ArrowRight, Bookmark, BookmarkCheck, BookOpen, BriefcaseBusiness,
   Check, CheckCircle2, ClipboardCheck, Cloud, Copy, ExternalLink, FileCheck2,
   GraduationCap, Languages, Layers, LogIn, LogOut, RefreshCw, RotateCcw, Sparkles,
-  Trash2, UserCheck, UserPlus, X,
+  Star, Trash2, UserCheck, UserPlus, X,
 } from 'lucide-react'
 import { SchemeFooter, SchemeHeader } from './SchemeInfo'
 import SchemeAuthModal from './SchemeAuthModal'
-import { PROFILE_TYPE_CARDS, type SelectableProfileType } from './lib/profileTypes'
+import {
+  PROFILE_TYPE_CARDS,
+  SCHEME_RECOMMENDATION_CATALOG,
+  getSuggestedSchemePreviewsForType,
+  type SelectableProfileType,
+} from './lib/profileTypes'
 import { useAuth } from './lib/auth'
 import { useToast } from './components/Toast'
 import {
@@ -650,6 +655,88 @@ export default function SchemeWorkflow({ initialTab }: { initialTab: 'profile' |
                   </button>
                 )
               })}
+            </div>
+
+            {/* Top Scheme Suggestions Directly Under Profile Type Cards */}
+            <div className="fs-type-suggestions sw-inline-suggestions">
+              <div className="fs-suggest-head">
+                <div>
+                  <span className="fs-kicker">
+                    <Sparkles size={13} />{' '}
+                    {t('TOP SCHEMES YOU SHOULD APPLY TO', 'सबसे मुख्य योजनाएँ जिनमें आपको आवेदन करना चाहिए')}
+                  </span>
+                  <h3>
+                    {activeTypeCard
+                      ? t(
+                          `Top recommended scheme(s) for ${activeTypeCard.enTitle}`,
+                          `${activeTypeCard.hiTitle} के लिए सबसे पहले आवेदन करने योग्य योजनाएँ`,
+                        )
+                      : t(
+                          'Most recommended scheme to apply to for each profile type',
+                          'प्रत्येक प्रोफ़ाइल प्रकार के लिए नंबर-1 सुझाई गई योजना',
+                        )}
+                  </h3>
+                </div>
+              </div>
+
+              <div className="fs-suggest-grid">
+                {getSuggestedSchemePreviewsForType(
+                  profile.profile_type === 'unset' ? 'all_rounder' : profile.profile_type,
+                ).map((item, idx) => {
+                  const typeForGoal: SelectableProfileType =
+                    profile.profile_type !== 'unset'
+                      ? profile.profile_type
+                      : item.goal === 'school'
+                        ? 'school_student'
+                        : item.goal === 'college'
+                          ? 'college_student'
+                          : 'entrepreneur'
+                  return (
+                    <article
+                      key={item.id}
+                      className={`fs-suggest-card ${idx === 0 || item.topPick ? 'top-pick' : ''}`}
+                    >
+                      <div className="fs-suggest-badges">
+                        {(idx === 0 || (profile.profile_type === 'unset' && item.topPick)) ? (
+                          <span className="fs-must-apply-badge">
+                            <Star size={12} />{' '}
+                            {t('MOST RECOMMENDED TO APPLY', 'सबसे पहले आवेदन करें')}
+                          </span>
+                        ) : (
+                          <span className="sw-goal-chip">{t('Recommended Option', 'सुझाई गई योजना')}</span>
+                        )}
+                        <span className="sw-goal-chip">{item.portalName}</span>
+                      </div>
+                      <h4>{language === 'hi' ? item.hiName : item.enName}</h4>
+                      <p className="fs-suggest-benefit">
+                        {language === 'hi' ? item.hiBenefit : item.enBenefit}
+                      </p>
+                      <div className="fs-why-apply">
+                        <strong>{t('Why apply to this scheme:', 'इसमें आवेदन क्यों करें:')}</strong>
+                        <p>{language === 'hi' ? item.hiWhyApplyFirst : item.enWhyApplyFirst}</p>
+                      </div>
+                      <div className="sw-card-actions">
+                        <button
+                          type="button"
+                          className="sw-apply-btn"
+                          onClick={() => selectProfileType(typeForGoal)}
+                        >
+                          {t('Select Profile & Check Eligibility', 'प्रोफ़ाइल चुनें और पात्रता जाँचें')}{' '}
+                          <ArrowRight size={14} />
+                        </button>
+                        <a
+                          className="sw-ext-link"
+                          href={item.applyUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          {t('Official portal', 'आधिकारिक पोर्टल')} <ExternalLink size={13} />
+                        </a>
+                      </div>
+                    </article>
+                  )
+                })}
+              </div>
             </div>
           </section>
         )}
@@ -1302,9 +1389,20 @@ export default function SchemeWorkflow({ initialTab }: { initialTab: 'profile' |
                       const saved = apps[scheme.id]
                       const readyDocs = scheme.required_documents.filter(d => d.ready).length
                       const totalDocs = scheme.required_documents.length
+                      const catMeta = SCHEME_RECOMMENDATION_CATALOG[scheme.id as keyof typeof SCHEME_RECOMMENDATION_CATALOG]
+                      const isTopRecommended = idx === 0 && scheme.status !== 'not_matched'
                       return (
-                        <article key={scheme.id} className="scheme-result sw-scheme-card">
+                        <article
+                          key={scheme.id}
+                          className={`scheme-result sw-scheme-card ${isTopRecommended ? 'sw-top-recommend' : ''}`}
+                        >
                           <div className="sw-card-badges">
+                            {isTopRecommended && (
+                              <span className="fs-must-apply-badge">
+                                <Star size={12} />{' '}
+                                {t('#1 MOST RECOMMENDED TO APPLY', '#1 सबसे पहले आवेदन करें')}
+                              </span>
+                            )}
                             <span className={`scheme-badge ${scheme.status}`}>
                               {idx + 1}. {matchData?.labels?.[scheme.status] ?? scheme.status}
                             </span>
@@ -1319,6 +1417,13 @@ export default function SchemeWorkflow({ initialTab }: { initialTab: 'profile' |
 
                           <h3>{scheme.name}</h3>
                           <p>{scheme.benefit}</p>
+
+                          {isTopRecommended && catMeta && (
+                            <div className="fs-why-apply">
+                              <strong>{t('Why you should apply to this first:', 'इसमें सबसे पहले आवेदन क्यों करें:')}</strong>
+                              <p>{language === 'hi' ? catMeta.hiWhyApplyFirst : catMeta.enWhyApplyFirst}</p>
+                            </div>
+                          )}
 
                           <ul>
                             {scheme.checks.map(c => (

@@ -46,7 +46,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                 role="status"
                 className="surface rounded-2xl shadow-lg shadow-navy-900/10 px-4 py-3 flex items-start gap-3">
                 <Icon size={18} className={`shrink-0 mt-0.5 ${TONE[t.kind]}`} />
-                <p className="text-sm font-medium flex-1 leading-snug">{t.message}</p>
+                <p className="text-sm font-medium flex-1 leading-snug text-slate-900 dark:text-slate-100">{t.message}</p>
                 <button onClick={() => dismiss(t.id)} aria-label="Dismiss notification" className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 shrink-0">
                   <X size={15} />
                 </button>

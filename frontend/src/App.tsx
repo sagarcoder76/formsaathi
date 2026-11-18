@@ -62,7 +62,7 @@ export default function App() {
   const latest = useRef({ tracker, reports, profile, uid })
   useEffect(() => { latest.current = { tracker, reports, profile, uid } })
 
-  useEffect(() => { document.documentElement.classList.toggle('dark', dark); localStorage.setItem('fs-dark', JSON.stringify(dark)) }, [dark])
+  useEffect(() => { document.documentElement.classList.toggle('dark', dark); document.documentElement.style.colorScheme = dark ? 'dark' : 'light'; localStorage.setItem('fs-dark', JSON.stringify(dark)) }, [dark])
   useEffect(() => { localStorage.setItem('fs-tracker', JSON.stringify(tracker)) }, [tracker])
   useEffect(() => { localStorage.setItem('fs-profile', JSON.stringify(profile)) }, [profile])
   useEffect(() => { localStorage.setItem('fs-reports', JSON.stringify(reports)) }, [reports])
