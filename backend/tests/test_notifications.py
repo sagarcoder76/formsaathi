@@ -127,7 +127,7 @@ async def test_dispatch_fans_out_per_prefs(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_deadline_runner_skips_rejected_and_dedups(monkeypatch):
-    today = date(2026, 10, 27)
+    today = date.today()
     due = (today + timedelta(days=1)).isoformat()
     rows = [
         {"user_id": "u1", "opportunity_id": "o1", "stage": "saved",

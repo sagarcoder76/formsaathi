@@ -12,13 +12,13 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="FormSaathi" />
     <meta name="mobile-web-app-capable" content="yes" />
-    <meta name="description" content="FormSaathi — discover verified internships, fresher jobs and campus placements across India, with match scores, scam warnings and application tracking." />
-    <title>FormSaathi — Internship & Placement Portal</title>
+    <meta name="description" content="FormSaathi — discover Indian government schemes and see how your profile matches their eligibility rules." />
+    <title>FormSaathi — Government Scheme Assistant</title>
     <script>
       // Apply the saved theme before first paint to avoid a flash of the wrong theme.
       try {
         var saved = JSON.parse(localStorage.getItem('fs-dark') || 'false')
-        if (saved) document.documentElement.classList.add('dark')
+        if (saved && new URLSearchParams(location.search).get("view") === "careers") document.documentElement.classList.add('dark')
       } catch (e) {}
     </script>
   </head>
